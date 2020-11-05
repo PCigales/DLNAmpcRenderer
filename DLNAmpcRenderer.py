@@ -448,11 +448,14 @@ class IPCmpcControler(threading.Thread):
       process_result = subprocess.run(r'"%s\%s"' % (IPCmpcControler.SCRIPT_PATH, 'mpc.bat'), env={**os.environ, 'hWnd': str(self.wnd_ctrl)}, capture_output=False)
     except:
       pass
-    self.logger.log('Lecteur: fermeture', 1)
-    if self.Player_status != "STOPPED":
-      self.Player_status = "STOPPED"
-      self.logger.log('Lecteur - événement enregistré: %s = "%s"' % ('TransportState', "STOPPED"), 1)    
-      self.Player_events.append(('TransportState', "STOPPED"))
+    if self.wnd_mpc:
+      self.logger.log('Lecteur: fermeture', 1)
+      if self.Player_status != "STOPPED":
+        self.Player_status = "STOPPED"
+        self.logger.log('Lecteur - événement enregistré: %s = "%s"' % ('TransportState', "STOPPED"), 1)    
+        self.Player_events.append(('TransportState', "STOPPED"))
+    else:
+      self.logger.log('Lecteur - échec du lancement', 1)
     self.Cmd_buffer[0] = "quit"
     self.Msg_buffer[0] = "quit"
     self.Player_event_event.set()
@@ -2470,6 +2473,8 @@ class DLNARenderer:
         self.IPCmpcControlerInstance.Player_events.append(('TransportState', "PLAYING"))
         self.IPCmpcControlerInstance.Player_event_event.set()
         self.IPCmpcControlerInstance.logger.log('Lecteur - événement enregistré: %s = "%s"' % ('TransportState', "PLAYING"), 1)
+      else:
+        self.send_command((0xA0000004, ''))
     elif acti.lower() == 'Pause'.lower():
       if self.TransportState == "NO_MEDIA_PRESENT":
         return '701', None
