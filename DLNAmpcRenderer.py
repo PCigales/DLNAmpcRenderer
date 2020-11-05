@@ -687,7 +687,7 @@ class DLNARequestHandler(socketserver.StreamRequestHandler):
       'Connection: close\r\n' \
       '\r\n'
       resp_body = b''
-      self.server.logger.log('Réception de la requête %s %s' % (req.method, req.path), 0)
+      self.server.logger.log('Réception de la requête %s %s' % (req.method, req.path), 2)
       dict_scpd = {'/D_S': 'Device_SCPD', '/RC_S': 'RenderingControl_SCPD', '/CM_S': 'ConnectionManager_SCPD', '/AVT_S': 'AVTransport_SCPD'}
       if req.path.upper() in dict_scpd:
         resp_body = eval('DLNARenderer.' + dict_scpd[req.path]).encode('UTF-8')
@@ -2469,10 +2469,11 @@ class DLNARenderer:
           self.IPCmpcControlerInstance.send_restore()
       elif self.IPCmpcControlerInstance.Player_image:
         self.IPCmpcControlerInstance.Player_paused = False
-        self.IPCmpcControlerInstance.Player_status = "PLAYING"
-        self.IPCmpcControlerInstance.Player_events.append(('TransportState', "PLAYING"))
-        self.IPCmpcControlerInstance.Player_event_event.set()
-        self.IPCmpcControlerInstance.logger.log('Lecteur - événement enregistré: %s = "%s"' % ('TransportState', "PLAYING"), 1)
+        if self.IPCmpcControlerInstance.Player_status != "PLAYING":
+          self.IPCmpcControlerInstance.Player_status = "PLAYING"
+          self.IPCmpcControlerInstance.Player_events.append(('TransportState', "PLAYING"))
+          self.IPCmpcControlerInstance.Player_event_event.set()
+          self.IPCmpcControlerInstance.logger.log('Lecteur - événement enregistré: %s = "%s"' % ('TransportState', "PLAYING"), 1)
       else:
         self.send_command((0xA0000004, ''))
     elif acti.lower() == 'Pause'.lower():
