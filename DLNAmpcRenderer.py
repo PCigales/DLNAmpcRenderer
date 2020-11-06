@@ -369,7 +369,7 @@ class IPCmpcControler(threading.Thread):
             self.logger.log('Lecteur - événement enregistré: %s = "%s"' % ('TransportState', "PLAYING"), 1)
           elif not_msg == '1':
             self.Player_paused = True
-            if self.Player_status == "PLAYING":
+            if self.Player_status == "PLAYING" and not self.Player_image:
               self.Player_status = "PAUSED_PLAYBACK"
               self.Player_events.append(('TransportState', "PAUSED_PLAYBACK"))
               self.Player_event_event.set()
@@ -2285,6 +2285,14 @@ class DLNARenderer:
         event_sub.Events.append(events)
         event_sub.EventEvent.set()
 
+  def _send_delayed_minimize(self):
+    if self.IPCmpcControlerInstance.Player_status in ('STOPPED', 'PAUSED_PLAYBACK'):
+      self.IPCmpcControlerInstance.send_minimize()
+  
+  def send_delayed_minimize(self):
+    min_thread = threading.Timer(0.5, self._send_delayed_minimize)
+    min_thread.start()
+
   def _events_manager(self):
     while self.is_events_manager_running:
       self.IPCmpcControlerInstance.Player_event_event.clear()
@@ -2302,7 +2310,10 @@ class DLNARenderer:
           if self.TransportState == "STOPPED":
             self.full_screen = self.FullScreen
             if self.Minimize:
-              self.IPCmpcControlerInstance.send_minimize()
+              if self.IPCmpcControlerInstance.Player_image:
+                self.send_delayed_minimize()
+              else:
+                self.IPCmpcControlerInstance.send_minimize()
           elif self.TransportState in ('PLAYING', 'PAUSED_PLAYBACK'):
             if self.Minimize:
               self.IPCmpcControlerInstance.send_restore()
