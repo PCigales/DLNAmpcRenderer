@@ -14,6 +14,7 @@ import time
 import uuid
 import subprocess
 import html
+from io import BytesIO
 import argparse
 
 
@@ -61,6 +62,53 @@ def _XMLGetNodeText(node):
     if childNode.nodeType == node.TEXT_NODE:
       text.append(childNode.data)
   return(''.join(text))
+
+def _jpeg_exif_orientation(image):
+  f = None
+  try:
+    f = BytesIO(image)
+    if f.read(2) != b'\xff\xd8':
+      f.close()
+      return
+    t = f.read(2)
+    if t == b'\xff\xe0':
+      len = struct.unpack('!H', f.read(2))[0]
+      f.read(len - 2)
+      t = f.read(2)
+    if t != b'\xff\xe1':
+      f.close()
+      return None
+    len = struct.unpack('!H', f.read(2))[0]
+    if f.read(6) != b'Exif\x00\x00':
+      f.close()
+      return None
+    ba = {b'MM': '>', b'II': '<'}.get(f.read(2),'')
+    if ba == '':
+      f.close()
+      return None
+    if f.read(2) != (b'\x00\x2a' if ba == '>' else b'\x2a\x00') :
+      f.close()
+      return None
+    f.read(struct.unpack(ba + 'I', f.read(4))[0] - 8)
+    ne = struct.unpack(ba + 'H', f.read(2))[0]
+    for i in range(ne):
+      e = f.read(12)
+      if struct.unpack(ba + 'H', e[0:2])[0] == 0x0112:
+        nb = {1: 1, 3: 2, 4:4}.get(struct.unpack(ba + 'H', e[2:4])[0],0)
+        if nb == 0 or struct.unpack(ba + 'I', e[4:8])[0] != 1:
+          f.close()
+          return None
+        f.close()
+        return {1: 'upper-left', 3: 'lower-right', 6: 'upper-right', 8: 'lower-left'}.get(struct.unpack(ba + {1: 'B', 2: 'H', 4: 'I'}[nb], e[8:8+nb])[0], None)
+    f.close()
+    return None
+  except:
+    if f:
+      try:
+        f.close()
+      except:
+        pass
+    return None
 
 
 class HTTPMessage():
@@ -312,10 +360,9 @@ class IPCmpcControler(threading.Thread):
         return user32.DefWindowProcW(HWND(hWnd), MSG(Msg), WPARAM(wParam), LPARAM(lParam))
       return 0
 
-  def __init__(self, title_name = 'mpc', verbosity=0):
+  def __init__(self, verbosity=0):
     self.verbosity = verbosity
     self.logger = log_event(verbosity)
-    self.title_name = title_name
     threading.Thread.__init__(self)
     self.WndProc = WNDPROC(self._PyWndProcedure)
     self.wnd_ctrl = None
@@ -709,6 +756,15 @@ class DLNARequestHandler(socketserver.StreamRequestHandler):
           self.server.logger.log('Réponse à la requête %s /ICON.PNG' % req.method, 1)
         except:
           self.server.logger.log('Échec de la réponse à la requête %s /ICON.PNG' % req.method, 1)
+      elif self.Renderer.rot_image and req.path.lower() == '/rotated.jpg':
+        try:
+          if req.method == 'GET':
+            self.request.sendall(resp.replace('##type##', 'image/jpeg').replace('##len##', str(len(self.Renderer.rot_image))).encode('ISO-8859-1') + (self.Renderer.rot_image))
+          else:
+            self.request.sendall(resp.replace('##type##', 'image/jpeg').replace('##len##', str(len(self.Renderer.rot_image))).encode('ISO-8859-1'))
+          self.server.logger.log('Réponse à la requête %s: %s' % (req.method, req.path), 1)
+        except:
+          self.server.logger.log('Échec de la réponse à la requête %s: %s' % (req.method, req.path), 1)
       else:
         try:
           self.request.sendall(resp_err.encode('ISO-8859-1'))
@@ -2102,7 +2158,7 @@ class DLNARenderer:
   'rtsp-rtp-udp:*:video/x-ms-wmv:*,' \
   'rtsp-rtp-udp:*:audio/x-asf-pf:*'
 
-  def __init__(self, RendererPort=8000, Minimize=False, FullScreen=False, WMPDMCHideMKV=False, TrustControler=False, verbosity=0):
+  def __init__(self, RendererPort=8000, Minimize=False, FullScreen=False, JpegRotate=False, WMPDMCHideMKV=False, TrustControler=False, verbosity=0):
     self.verbosity = verbosity
     self.logger = log_event(verbosity)
     self.ip = socket.gethostbyname(socket.getfqdn())
@@ -2110,9 +2166,10 @@ class DLNARenderer:
     self.Minimize = Minimize
     self.FullScreen = FullScreen
     self.full_screen = FullScreen
+    self.JpegRotate = JpegRotate
     self.WMPDMCHideMKV = WMPDMCHideMKV
     self.TrustControler = TrustControler
-    self.IPCmpcControlerInstance = IPCmpcControler(title_name=NAME + ':%s' % RendererPort , verbosity=verbosity)
+    self.IPCmpcControlerInstance = IPCmpcControler(verbosity=verbosity)
     self.IPCmpcControlerInstance.Player_fullscreen = FullScreen
     self.is_search_manager_running = None
     self.is_request_manager_running = None
@@ -2193,6 +2250,7 @@ class DLNARenderer:
     self.AVTransportURIMetaData = ""
     self.RelativeTimePosition = "0:00:00"
     self.CurrentMediaDuration = "0:00:00"
+    self.rot_image = b''
 
   def send_advertisement(self, alive):
     msg = 'NOTIFY * HTTP/1.1\r\n' \
@@ -2347,6 +2405,84 @@ class DLNARenderer:
       self.logger.log('Fin de la gestion des événements', 1)
       self._shutdown_events_manager()
 
+  def _rotate_jpeg(self, image, angle):
+    try:
+      name = NAME + ':%s' % self.port
+      pipe_w = HANDLE(kernel32.CreateNamedPipeW(LPCWSTR(r'\\.\pipe\write_' + urllib.parse.quote(name, safe='')), DWORD(0x00000003), DWORD(0), DWORD(1), DWORD(0x100000), DWORD(0x100000), DWORD(0), HANDLE(0)))
+      pipe_r = HANDLE(kernel32.CreateNamedPipeW(LPCWSTR(r'\\.\pipe\read_' + urllib.parse.quote(name, safe='')), DWORD(0x00000003), DWORD(0), DWORD(1), DWORD(0x100000), DWORD(0x100000), DWORD(0), HANDLE(0)))
+    except:
+      return None
+    b = ctypes.create_string_buffer(0x100000)
+    try:
+      process = subprocess.Popen(r'"%s\%s"' % (IPCmpcControler.SCRIPT_PATH, 'jpegtrans.bat'), env={**os.environ, 'jpegtrans_rot': str(angle), 'jpegtrans_input': r'\\.\pipe\write_' + urllib.parse.quote(name, safe=''), 'jpegtrans_output': r'\\.\pipe\read_' + urllib.parse.quote(name, safe='')}, creationflags=subprocess.CREATE_NEW_CONSOLE, startupinfo=subprocess.STARTUPINFO(dwFlags=subprocess.STARTF_USESHOWWINDOW, wShowWindow=6))
+    except:
+      try:
+        kernel32.DisconnectNamedPipe(pipe_w)
+        kernel32.CloseHandle(pipe_w)
+        kernel32.DisconnectNamedPipe(pipe_r)
+        kernel32.CloseHandle(pipe_r)
+      except:
+        pass
+      return None
+    n = DWORD()
+    try:
+      while not kernel32.WriteFile(pipe_w, ctypes.cast(image, PVOID), DWORD(len(image)), ctypes.byref(n), LPVOID(0)):
+        if process.poll() != None:
+          kernel32.DisconnectNamedPipe(pipe_w)
+          kernel32.CloseHandle(pipe_w)
+          kernel32.DisconnectNamedPipe(pipe_r)
+          kernel32.CloseHandle(pipe_r)
+          return None
+        time.sleep(0.5)
+      kernel32.FlushFileBuffers(pipe_w)
+      kernel32.DisconnectNamedPipe(pipe_w)
+      kernel32.CloseHandle(pipe_w)
+    except:
+      try:
+        kernel32.DisconnectNamedPipe(pipe_w)
+        kernel32.CloseHandle(pipe_w)
+        kernel32.DisconnectNamedPipe(pipe_r)
+        kernel32.CloseHandle(pipe_r) 
+      except:
+        pass
+      try:
+        if process.poll() == None:
+          os.system('taskkill /t /f /pid %s >nul 2>&1' % (process.pid))
+      except:
+        pass
+      return None
+    rotated = b''
+    n = DWORD()
+    again = True
+    try:
+      while again:
+        again = kernel32.ReadFile(pipe_r, ctypes.cast(b, PVOID), DWORD(len(b)), ctypes.byref(n), LPVOID(0))
+        again = (again or not rotated) and process.poll() == None
+        rotated = rotated + b.raw[:n.value]
+      kernel32.DisconnectNamedPipe(pipe_r)
+      kernel32.CloseHandle(pipe_r)
+    except:
+      try:
+        kernel32.DisconnectNamedPipe(pipe_r)
+        kernel32.CloseHandle(pipe_r)
+      except:
+        pass
+      try:
+        if process.poll() == None:
+          os.system('taskkill /t /f /pid %s >nul 2>&1' % (process.pid))
+      except:
+        pass
+      return None
+    try:
+      if process.poll() == None:
+        os.system('taskkill /t /f /pid %s >nul 2>&1' % (process.pid))
+    except:
+      pass
+    if not rotated:
+      return None
+    else:
+      return rotated
+
   def _process_action(self, action_id, servi, acti, args, agent):
     service = next((serv for serv in self.Services if serv.Id.lower() == ('urn:upnp-org:serviceId:' + servi).lower()), None)
     if not service:
@@ -2422,19 +2558,17 @@ class DLNARenderer:
       if uri:
         if self.TrustControler:
           rep = True
-        else:
+        elif r'://' in uri:
           rep = _open_url(uri, method='HEAD', test_range=True)
           if rep:
             server = rep.getheader('Server', '')
             if rep.getheader('Accept-Ranges'):
-              if rep.getheader('Accept-Ranges').lower() != 'none':
-                accept_range = True
-              else:
+              if rep.getheader('Accept-Ranges').lower() == 'none':
                 accept_range = False
-            elif rep.status == 206:
-              accept_range = True
-            else:
+            elif rep.status != 206:
               accept_range = False
+        else:
+          rep = os.path.isfile(uri)
       if not rep:
         self.events_add('AVTransport', (('TransportStatus', "ERROR_OCCURRED"),))
         self.events_add('AVTransport', (('TransportStatus', "OK"),))
@@ -2444,9 +2578,28 @@ class DLNARenderer:
         self.IPCmpcControlerInstance.Player_event_event.set()
         return '716', None
       self.AVTransportURI = uri
-      if not self.TrustControler:
+      if not self.TrustControler and rep != True:
         rep.close()
       rep = None
+      self.rot_image = b''
+      if 'object.item.imageItem'.lower() in upnp_class.lower() and self.JpegRotate:
+        image = None
+        try:
+          if r'://' in uri:
+            f = _open_url(uri, method='GET')
+          else:
+            f = open(uri, 'rb')
+          image = f.read()
+          f.close()
+        except:
+          image = None
+        if image:
+          rotation = {'upper-left': 0, 'lower-right': 180, 'upper-right': 90, 'lower-left': 270}.get(_jpeg_exif_orientation(image), 0)
+        else:
+          rotation = 0
+        if rotation:
+          self.rot_image = self._rotate_jpeg(image, rotation) or b''
+        image = b''
       self.AVTransportURIMetaData = '<DIDL-Lite xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" xmlns:dlna="urn:schemas-dlna-org:metadata-1-0/" xmlns:sec="http://www.sec.co.kr/"><item><dc:title>%s</dc:title><upnp:class>%s</upnp:class><res protocolInfo="%s">%s</res></item></DIDL-Lite>' % (html.escape(title), upnp_class, html.escape(protocol_info), html.escape(uri))
       self.events_add('AVTransport', (('AVTransportURI', self.AVTransportURI), ('AVTransportURIMetaData', self.AVTransportURIMetaData), ('CurrentTrackMetaData', self.AVTransportURIMetaData), ('CurrentTrackURI', self.AVTransportURI)))
       if prev_transp_state == "TRANSITIONING":
@@ -2459,18 +2612,20 @@ class DLNARenderer:
         self.events_add('AVTransport', (('CurrentMediaDuration', "0:00:00"), ('CurrentTrackDuration', "0:00:00")))
         self.IPCmpcControlerInstance.Player_event_event.set()
       else:
-        self.send_command((0xA0000000, self.AVTransportURI))
+        self.send_command((0xA0000000, self.AVTransportURI if not self.rot_image else 'http://%s:%s/rotated.jpg' % (self.ip, self.port)))
         if '<upnp:class>object.item.imageItem'.lower() in self.AVTransportURIMetaData.replace(' ','').lower():
           self.IPCmpcControlerInstance.Player_image = True
         else:
           self.IPCmpcControlerInstance.Player_image = False
           self.send_command((0xA0000004, ''))
       self.logger.log('Contenu en cours: %s | %s | %s' % ('vidéo' if 'video' in upnp_class.lower() else 'audio' if 'audio' in upnp_class.lower() else 'image' if 'image' in upnp_class.lower() else '', title, self.AVTransportURI), 0)
+      if self.rot_image:
+        self.logger.log('Rotation du contenu de %s°' % rotation, 2)
     elif acti.lower() == 'Play'.lower():
       if self.TransportState == "NO_MEDIA_PRESENT":
         return '701', None
       if self.IPCmpcControlerInstance.Player_status.upper() in ("STOPPED", "NO_MEDIA_PRESENT"):
-        self.send_command((0xA0000000, self.AVTransportURI))
+        self.send_command((0xA0000000, self.AVTransportURI if not self.rot_image else 'http://%s:%s/rotated.jpg' % (self.ip, self.port)))
         if '<upnp:class>object.item.imageItem'.lower() in self.AVTransportURIMetaData.replace(' ','').lower():
           self.IPCmpcControlerInstance.Player_image = True
         else:
@@ -2598,6 +2753,7 @@ if __name__ == '__main__':
   parser.add_argument('--name', '-n', metavar='RENDERER_NAME', help='nom du renderer [DLNAmpcRenderer par défaut]', default='DLNAmpcRenderer')
   parser.add_argument('--minimize', '-m', help='passage en mode minimisé quand inactif [désactivé par défaut]', action='store_true')
   parser.add_argument('--fullscreen', '-f', help='passage en mode plein écran à chaque session [désactivé par défaut]', action='store_true')
+  parser.add_argument('--rotate_jpeg', '-r', help='rotation automatique des images jpeg [désactivé par défaut]', action='store_true')
   parser.add_argument('--wmpdmc_no_mkv', '-w', help='masque la prise en charge du format matroska à WMPDMC pour permettre le contrôle distant [désactivé par défaut]', action='store_true')
   parser.add_argument('--trust_controler', '-t', help='désactive la vérification des adresses avant leur transmission à mpc [désactivé par défaut]', action='store_true')
   parser.add_argument('--verbosity', '-v', metavar='VERBOSE', help='niveau de verbosité de 0 à 2 [0 par défaut]', type=int, choices=[0, 1, 2], default=0)
@@ -2607,7 +2763,7 @@ if __name__ == '__main__':
     NAME = args.name
     UDN = 'uuid:' + str(uuid.uuid5(uuid.NAMESPACE_URL, args.name))
     DLNARenderer.Device_SCPD = DLNARenderer.Device_SCPD.replace('DLNAmpcRenderer', html.escape(NAME)).replace('uuid:' + str(uuid.uuid5(uuid.NAMESPACE_URL, 'DLNAmpcRenderer')), UDN)
-  Renderer = DLNARenderer(args.port, args.minimize, args.fullscreen, args.wmpdmc_no_mkv, args.trust_controler, args.verbosity)
+  Renderer = DLNARenderer(args.port, args.minimize, args.fullscreen, args.rotate_jpeg, args.wmpdmc_no_mkv, args.trust_controler, args.verbosity)
   print('Appuyez sur "S" ou fermez mpc pour stopper')
   print('Appuyez sur "M" pour activer/désactiver le passage en mode minimisé quand inactif - mode actuel: %s' % ('activé' if Renderer.Minimize else 'désactivé'))
   print('Appuyez sur "F" pour activer/désactiver le passage en mode plein écran à chaque session - mode actuel: %s' % ('activé' if Renderer.FullScreen else 'désactivé'))
