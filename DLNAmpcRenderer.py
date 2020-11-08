@@ -66,7 +66,15 @@ def _XMLGetNodeText(node):
 def _jpeg_exif_orientation(image):
   f = None
   try:
-    f = BytesIO(image)
+    if isinstance(image, bytes):
+      f = BytesIO(image)
+    elif isinstance(image, str):
+      if r'://' in image:
+        f = _open_url(image, method='GET')
+      else:
+        f = open(image, 'rb')
+    else:
+      return
     if f.read(2) != b'\xff\xd8':
       f.close()
       return
@@ -352,6 +360,8 @@ class IPCmpcControler(threading.Thread):
             self.wnd_mpc = int(not_msg)
             self.logger.log('Lecteur - handle de mpc: %s' % self.wnd_mpc, 1)
             self.Player_event_event.set()
+            self.wnd_mpc_mute = user32.FindWindowExW(HWND(self.wnd_mpc), HWND(0), LPCWSTR('ToolbarWindow32'), LPCWSTR(0))
+            self.wnd_mpc_volume = user32.FindWindowExW(HWND(self.wnd_mpc_mute), HWND(0), LPCWSTR('msctls_trackbar32'), LPCWSTR(0))
           else:
             if not_code == 0x5000000B:
               self.Msg_buffer[0] = "quit"
@@ -367,6 +377,8 @@ class IPCmpcControler(threading.Thread):
     self.WndProc = WNDPROC(self._PyWndProcedure)
     self.wnd_ctrl = None
     self.wnd_mpc = None
+    self.wnd_mpc_mute = None
+    self.wnd_mpc_volume = None
     self.Cmd_Event = threading.Event()
     self.Msg_event = threading.Event()
     self.Cmd_buffer = ["run"]
@@ -381,6 +393,8 @@ class IPCmpcControler(threading.Thread):
     self.Player_event_event = threading.Event()
     self.Player_image = False
     self.Player_fullscreen = False
+    self.Player_rotation = 0
+    self.Player_subtitles = ""
 
   def manage_incoming_msg(self):
     while self.Msg_buffer[0] == "run":
@@ -403,6 +417,9 @@ class IPCmpcControler(threading.Thread):
             self.Player_events.append(('TransportState', "TRANSITIONING"))
             self.Player_event_event.set()
             self.logger.log('Lecteur - événement enregistré: %s = "%s"' % ('TransportState', "TRANSITIONING"), 2)
+          elif not_msg == '2':
+            if self.Player_subtitles:
+              self.send_subtitles(self.Player_subtitles)
           elif not_msg == '4':
             self.Player_events.append(('TransportStatus', "ERROR_OCCURRED"))
             self.Player_event_event.set()
@@ -416,6 +433,10 @@ class IPCmpcControler(threading.Thread):
             self.logger.log('Lecteur - événement enregistré: %s = "%s"' % ('TransportState', "PLAYING"), 1)
             if self.Player_image:
               self.send_command(0xA0000005, '')
+              self.send_rotate(self.Player_rotation)
+            #if self.Player_subtitles:
+              #self.send_subtitles(self.Player_subtitles)
+              #self.Player_subtitles = ''
           elif not_msg == '1':
             self.Player_paused = True
             if self.Player_status == "PLAYING" and not self.Player_image:
@@ -519,6 +540,10 @@ class IPCmpcControler(threading.Thread):
     user32.SendMessageW(HWND(self.wnd_mpc), UINT(0x4a), HWND(self.wnd_ctrl), copydata)
     self.logger.log('Lecteur - commande envoyée - code:%s - message:%s' % (hex(cmd_code), cmd_msg), 2)
 
+  def send_key(self, key_code):
+    user32.SendMessageW(HWND(self.wnd_mpc), UINT(0x111), WPARAM(key_code), LPARAM(0))
+    self.logger.log('Lecteur - touche envoyée - code:%s' % key_code, 2)
+
   def send_minimize(self):
     user32.SendMessageW(HWND(self.wnd_mpc), UINT(0x0112), WPARAM(0xF020), LPARAM(0))
     self.logger.log('Lecteur - commande envoyée: minimize', 2)
@@ -533,7 +558,46 @@ class IPCmpcControler(threading.Thread):
       self.send_command(0xA0004000, '')
     user32.SetForegroundWindow(self.wnd_mpc)
 
+  def send_subtitles(self, uri):
+    open_thread = threading.Thread(target=self.send_key, args=(809,))
+    open_thread.start()
+    wnd_open = 0
+    for i in range(4):
+      wnd_open = user32.GetWindow(self.wnd_mpc, 6)
+      if wnd_open:
+        break
+      time.sleep(0.5)
+    if not wnd_open:
+      return None
+    wnd_edit = user32.FindWindowExW(HWND(user32.FindWindowExW(HWND(user32.FindWindowExW(HWND(wnd_open), HWND(0), LPCWSTR('ComboBoxEx32'), LPCWSTR(0))), HWND(0), LPCWSTR('ComboBox'), LPCWSTR(0))), HWND(0), LPCWSTR('Edit'), LPCWSTR(0))
+    user32.SendMessageW(HWND(wnd_edit), UINT(0x0c), WPARAM(0), ctypes.create_string_buffer(uri.encode('utf-16-le')+b'\x00'))
+    wnd_ok = 0
+    for i in range(3):
+      wnd_ok = user32.FindWindowExW(HWND(wnd_open), HWND(wnd_ok), LPCWSTR('Button'), LPCWSTR(0))
+      if user32.GetWindowLongPtrW(HWND(wnd_ok), -12) == 1:
+        break
+    user32.SendMessageW(HWND(wnd_ok), UINT(0xf5), WPARAM(0), LPARAM(0))
+
+  def get_mute(self):
+    return True if user32.SendMessageW(HWND(self.wnd_mpc_mute), UINT(0x40a), WPARAM(909), LPARAM(0)) else False
+
+  def set_mute(self, mute):
+    if self.get_mute() != mute:
+      self.send_key(909)
+
+  def get_volume(self):
+    return user32.SendMessageW(HWND(self.wnd_mpc_volume), UINT(0x400), WPARAM(909), LPARAM(0))
+
+  def set_volume(self, volume):
+    user32.SendMessageW(HWND(self.wnd_mpc_volume), UINT(0x422), WPARAM(0), volume)
+
+  def send_rotate(self, rotation):
+    for i in range(rotation // 90):
+      self.send_key(882)
+      time.sleep(0.1)
+
   def send_commands(self):
+    iter = 0
     while self.Cmd_buffer[0] == "run":
       self.Cmd_Event.clear()
       while len(self.Cmd_buffer) > 1:
@@ -544,6 +608,22 @@ class IPCmpcControler(threading.Thread):
       if self.Cmd_buffer[0] == "run":
         if self.Player_status == "PLAYING" or self.Player_status == "PAUSED_PLAYBACK":
           self.send_command(0xA0003004, '')
+        if not iter:
+          t = self.get_mute()
+          if t != self.Player_mute:
+            self.Player_mute = t
+            self.Player_events.append(('Mute', self.Player_mute))
+            self.Player_event_event.set()
+            self.logger.log('Lecteur - événement enregistré: %s = "%s"' % ('Mute', self.Player_mute), 2)
+          t = self.get_volume()
+          if t != self.Player_volume:
+             self.Player_volume = t
+             self.Player_events.append(('Volume', self.Player_volume))
+             self.Player_event_event.set()
+             self.logger.log('Lecteur - événement enregistré: %s = "%s"' % ('Volume', self.Player_volume), 2)
+          iter = 1
+        else:
+          iter = 0
         self.Cmd_Event.wait(0.5)
     self.Msg_buffer[0] = "quit"
     self.Msg_event.set()
@@ -1079,7 +1159,7 @@ class EventSubscription:
     self.logger = self.Renderer.logger
     self.Service = next((serv for serv in renderer.Services if serv.Id.lower() == ('urn:upnp-org:serviceId:' + service).lower()), None)
     sub_time = time.time()
-    self.SID = 'uuid:' + str(uuid.uuid5(uuid.NAMESPACE_URL, str(sub_time)))
+    self.SID = 'uuid:' + str(uuid.uuid5(uuid.NAMESPACE_URL, service + str(sub_time)))
     self.End_time_lock = threading.Lock()
     self.End_time = sub_time + timeout
     self.Callback = callback
@@ -1126,7 +1206,7 @@ class EventSubscription:
           msg_body = msg_body.replace('##prop##', '').encode('UTF-8')
         else:
           msg_body = '<?xml version="1.0"?>\n' \
-        '<e:propertyset xmlns:e="urn:schemas-upnp-org:event-1-0"><e:property><LastChange>&lt;Event xmlns=&quot;urn:schemas-upnp-org:metadata-1-0/AVT/&quot;&gt;&lt;InstanceID val=&quot;0&quot;&gt;##prop##&lt;/InstanceID&gt;&lt;/Event&gt;</LastChange></e:property></e:propertyset>'
+        '<e:propertyset xmlns:e="urn:schemas-upnp-org:event-1-0"><e:property><LastChange>&lt;Event xmlns=&quot;urn:schemas-upnp-org:metadata-1-0/%s/&quot;&gt;&lt;InstanceID val=&quot;0&quot;&gt;##prop##&lt;/InstanceID&gt;&lt;/Event&gt;</LastChange></e:property></e:propertyset>' % ('AVT' if 'AVTransport'.lower() in self.Service.Id.lower() else 'RCS')
           for prop_name, prop_value in event:
             msg_body = msg_body.replace('##prop##', html.escape('<' + prop_name + ' val="' + html.escape(prop_value) + '"/>##prop##'))
           msg_body = msg_body.replace('##prop##', '').encode('UTF-8')
@@ -1158,6 +1238,8 @@ class EventSubscription:
   def start_event_management(self):
     if 'AVTransport'.lower() in self.Service.Id.lower():
       self.Events = [(('TransportState', self.Renderer.TransportState), ('TransportStatus', "OK"), ('TransportPlaySpeed', "1"), ('NumberOfTracks', "1" if self.Renderer.AVTransportURI else "0"), ('CurrentMediaDuration', self.Renderer.CurrentMediaDuration), ('AVTransportURI', self.Renderer.AVTransportURI), ('AVTransportURIMetaData', self.Renderer.AVTransportURIMetaData), ('PlaybackStorageMedium', "NETWORK,NONE"), ('CurrentTrack', "1" if self.Renderer.AVTransportURI else "0"), ('CurrentTrackDuration', self.Renderer.CurrentMediaDuration), ('CurrentTrackMetaData', self.Renderer.AVTransportURIMetaData), ('CurrentTrackURI', self.Renderer.AVTransportURI), ('CurrentTransportActions', {'TRANSITIONING': "Stop", 'STOPPED': "Play,Seek",'PAUSED_PLAYBACK': "Play,Stop,Seek" ,'PLAYING': "Pause,Stop,Seek"}.get(self.Renderer.TransportState, "")), ('CurrentPlayMode', "NORMAL"))]
+    elif 'RenderingControl'.lower() in self.Service.Id.lower():
+      self.Events = [(('Mute channel="Master"', self.Renderer.Mute), ('Volume channel="Master"', self.Renderer.Volume))]
     elif 'ConnectionManager'.lower() in self.Service.Id.lower():
       self.Events = [(('SourceProtocolInfo', ""), ('SinkProtocolInfo', DLNARenderer.Sink))]
     manager_thread = threading.Thread(target=self._event_manager)
@@ -1240,10 +1322,116 @@ class DLNARenderer:
     <major>1</major>
     <minor>0</minor>
   </specVersion>
+  <actionList>
+    <action>  
+      <name>GetMute</name>
+      <argumentList>
+        <argument>
+          <name>InstanceID</name>
+          <direction>in</direction>
+          <relatedStateVariable>A_ARG_TYPE_InstanceID</relatedStateVariable>
+        </argument>
+        <argument>
+          <name>Channel</name>
+          <direction>in</direction>
+          <relatedStateVariable>A_ARG_TYPE_Channel</relatedStateVariable>
+        </argument>
+        <argument>
+          <name>CurrentMute</name>
+          <direction>out</direction>
+          <relatedStateVariable>Mute</relatedStateVariable>
+        </argument>
+      </argumentList>
+    </action>
+    <action> 
+      <name>SetMute</name>
+      <argumentList>
+        <argument>
+          <name>InstanceID</name>
+          <direction>in</direction>
+          <relatedStateVariable>A_ARG_TYPE_InstanceID</relatedStateVariable>
+        </argument>
+        <argument>
+          <name>Channel</name>
+          <direction>in</direction>
+          <relatedStateVariable>A_ARG_TYPE_Channel</relatedStateVariable>
+        </argument>
+        <argument>
+          <name>DesiredMute</name>
+          <direction>in</direction>
+          <relatedStateVariable>Mute</relatedStateVariable>
+        </argument>
+      </argumentList>
+    </action>
+    <action> 
+      <name>GetVolume</name>
+      <argumentList>
+        <argument>
+          <name>InstanceID</name>
+          <direction>in</direction>
+          <relatedStateVariable>A_ARG_TYPE_InstanceID</relatedStateVariable>
+        </argument>
+        <argument>
+          <name>Channel</name>
+          <direction>in</direction>
+          <relatedStateVariable>A_ARG_TYPE_Channel</relatedStateVariable>
+        </argument>
+        <argument>
+          <name>CurrentVolume</name>
+          <direction>out</direction>
+          <relatedStateVariable>Volume</relatedStateVariable>
+        </argument>
+      </argumentList>
+    </action>
+    <action> 
+      <name>SetVolume</name>
+      <argumentList>
+        <argument>
+          <name>InstanceID</name>
+          <direction>in</direction>
+          <relatedStateVariable>A_ARG_TYPE_InstanceID</relatedStateVariable>
+        </argument>
+        <argument>
+          <name>Channel</name>
+          <direction>in</direction>
+          <relatedStateVariable>A_ARG_TYPE_Channel</relatedStateVariable>
+        </argument>
+        <argument>
+          <name>DesiredVolume</name>
+          <direction>in</direction>
+          <relatedStateVariable>Volume</relatedStateVariable>
+        </argument>
+      </argumentList>
+    </action>
+  </actionList>
   <serviceStateTable>
-    <stateVariable sendEvents="no"> 
+    <stateVariable sendEvents="yes"> 
       <name>LastChange</name> 
       <dataType>string</dataType>
+    </stateVariable>
+    <stateVariable sendEvents="no"> 
+      <name>Mute</name>  
+      <dataType>boolean</dataType>
+    </stateVariable>
+    <stateVariable sendEvents="no"> 
+      <name>Volume</name>  
+      <dataType>ui2</dataType>
+      <allowedValueRange>
+        <minimum>0</minimum>
+        <maximum>100</maximum>
+        <step>1</step>
+      </allowedValueRange>
+    </stateVariable>
+    <stateVariable sendEvents="no"> 
+      <name>A_ARG_TYPE_Channel</name>  
+      <dataType>string</dataType>
+      <allowedValueList>
+        <allowedValue>Master</allowedValue>
+      </allowedValueList>
+    </stateVariable>
+    <stateVariable sendEvents="no"> 
+      <name>A_ARG_TYPE_InstanceID</name>  
+      <dataType>ui4</dataType>
     </stateVariable>
   </serviceStateTable>
 </scpd>'''
@@ -2166,16 +2354,17 @@ class DLNARenderer:
   'rtsp-rtp-udp:*:video/x-ms-wmv:*,' \
   'rtsp-rtp-udp:*:audio/x-asf-pf:*'
 
-  def __init__(self, RendererPort=8000, Minimize=False, FullScreen=False, JpegRotate=False, WMPDMCHideMKV=False, TrustControler=False, verbosity=0):
+  def __init__(self, RendererPort=8000, Minimize=False, FullScreen=False, JpegRotate=False, WMPDMCHideMKV=False, TrustControler=False, SearchSubtitles=False, verbosity=0):
     self.verbosity = verbosity
     self.logger = log_event(verbosity)
     self.ip = socket.gethostbyname(socket.getfqdn())
     self.port = RendererPort
     self.Minimize = Minimize
     self.FullScreen = FullScreen
-    self.JpegRotate = JpegRotate
+    self.JpegRotate = False if JpegRotate.lower() == 'n' else JpegRotate.lower()
     self.WMPDMCHideMKV = WMPDMCHideMKV
     self.TrustControler = TrustControler
+    self.SearchSubtitles = SearchSubtitles
     self.IPCmpcControlerInstance = IPCmpcControler(verbosity=verbosity)
     self.IPCmpcControlerInstance.Player_fullscreen = FullScreen
     self.is_search_manager_running = None
@@ -2275,6 +2464,7 @@ class DLNARenderer:
       sock.sendto(msg.replace('##NT##', '::upnp:rootdevice').encode('ISO-8859-1'), ('239.255.255.250', 1900))
       sock.sendto(msg.replace('##NT##', '').encode('ISO-8859-1'), ('239.255.255.250', 1900))
       sock.sendto(msg.replace('##NT##', '::urn:schemas-upnp-org:device:MediaRenderer:1').encode('ISO-8859-1'), ('239.255.255.250', 1900))
+      sock.sendto(msg.replace('##NT##', '::urn:schemas-upnp-org:service:RenderingControl:1').encode('ISO-8859-1'), ('239.255.255.250', 1900))
       sock.sendto(msg.replace('##NT##', '::urn:schemas-upnp-org:service:ConnectionManager:1').encode('ISO-8859-1'), ('239.255.255.250', 1900))
       sock.sendto(msg.replace('##NT##', '::urn:schemas-upnp-org:service:AVTransport:1').encode('ISO-8859-1'), ('239.255.255.250', 1900))
       sock.close()
@@ -2387,6 +2577,12 @@ class DLNARenderer:
         elif event[0] == 'TransportStatus' and event[1].upper() == "ERROR_OCCURRED":
           self.events_add('AVTransport', (('TransportStatus', "ERROR_OCCURRED"),))
           self.events_add('AVTransport', (('TransportStatus', "OK"),))
+        elif event[0] == 'Mute':
+          self.Mute = "1" if event[1] else "0"
+          self.events_add('RenderingControl', (('Mute channel="Master"', self.Mute),))
+        elif event[0] == 'Volume':
+          self.Volume = str(event[1])
+          self.events_add('RenderingControl', (('Volume channel="Master"', self.Volume),))
       if self.is_events_manager_running:
         self.IPCmpcControlerInstance.Player_event_event.wait()
 
@@ -2525,6 +2721,8 @@ class DLNARenderer:
       title = ''
       upnp_class = ''
       s_protocol_info = ''
+      caption_info = ''
+      caption_type = ''
       try:
         didl_root = minidom.parseString(in_args['CurrentURIMetaData'.lower()])
         node = None
@@ -2550,8 +2748,13 @@ class DLNARenderer:
                         protocol_info = att[1]
                   if not s_protocol_info and in_args['CurrentURI'.lower()] == _XMLGetNodeText(ch_node):
                     s_protocol_info = att[1]
+                elif not caption_info and 'subtitlefileuri' in att[0].lower():
+                  caption_info = att[1]
             elif ':class' in ch_node.tagName.lower():
               upnp_class = _XMLGetNodeText(ch_node)
+            elif ':captioninfo' in ch_node.tagName.lower():
+              caption_info = _XMLGetNodeText(ch_node)
+              caption_type = next(att_v for (att_n, att_v) in ch_node.attributes.items() if att_n.lower()=='sec:type')
       except:
         uri = None
       if not uri:
@@ -2583,11 +2786,34 @@ class DLNARenderer:
         self.IPCmpcControlerInstance.Player_event_event.set()
         return '716', None
       self.AVTransportURI = uri
-      if not self.TrustControler and rep != True:
+      if rep == True:
+        self.AVTransportSubURI = caption_info
+      else:
+        self.AVTransportSubURI = rep.getheader('CaptionInfo.sec', caption_info)
         rep.close()
       rep = None
+      if self.AVTransportSubURI and not self.TrustControler:
+        if r'://' in uri:
+          rep = _open_url(self.AVTransportSubURI, method='HEAD')
+        else:
+          rep = os.path.isfile(self.AVTransportSubURI)
+        if not rep:
+          self.AVTransportSubURI = ""
+        elif rep != True:
+          rep.close()
+      if self.SearchSubtitles and 'object.item.videoItem'.lower() in upnp_class.lower() and not self.AVTransportSubURI and r'://' in uri and not 'Microsoft-HTTPAPI'.lower() in server.lower() and not "BubbleUPnP".lower() in server.lower():
+        uri_name = uri.rsplit('.', 1)[0]
+        for sub_ext in ('.ttxt', '.txt', '.smi', '.srt', '.sub', '.ssa', '.ass'):
+          rep = _open_url(uri_name + sub_ext, method='HEAD', timeout=2)
+          if rep:
+            self.AVTransportSubURI = uri_name + sub_ext
+            caption_type = sub_ext
+            rep.close()
+            break
+      self.IPCmpcControlerInstance.Player_subtitles = self.AVTransportSubURI
       self.rot_image = b''
-      if 'object.item.imageItem'.lower() in upnp_class.lower() and self.JpegRotate:
+      self.Rotation = 0
+      if 'object.item.imageItem'.lower() in upnp_class.lower() and self.JpegRotate == 'j':
         image = None
         try:
           if r'://' in uri:
@@ -2605,7 +2831,9 @@ class DLNARenderer:
         if rotation:
           self.rot_image = self._rotate_jpeg(image, rotation) or b''
         image = b''
-      self.AVTransportURIMetaData = '<DIDL-Lite xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" xmlns:dlna="urn:schemas-dlna-org:metadata-1-0/" xmlns:sec="http://www.sec.co.kr/"><item><dc:title>%s</dc:title><upnp:class>%s</upnp:class><res protocolInfo="%s">%s</res></item></DIDL-Lite>' % (html.escape(title), upnp_class, html.escape(protocol_info), html.escape(uri))
+      if 'object.item.imageItem'.lower() in upnp_class.lower() and self.JpegRotate == 'k':
+        self.IPCmpcControlerInstance.Player_rotation = {'upper-left': 0, 'lower-right': 180, 'upper-right': 90, 'lower-left': 270}.get(_jpeg_exif_orientation(self.AVTransportURI), 0)
+      self.AVTransportURIMetaData = '<DIDL-Lite xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" xmlns:dlna="urn:schemas-dlna-org:metadata-1-0/" xmlns:sec="http://www.sec.co.kr/"><item><dc:title>%s</dc:title><upnp:class>%s</upnp:class><res protocolInfo="%s">%s</res>%s</item></DIDL-Lite>' % (html.escape(title), upnp_class, html.escape(protocol_info), html.escape(uri), '<sec:CaptionInfoEx sec:type="%s">%s</sec:CaptionInfoEx>' %(html.escape(caption_type), html.escape(self.AVTransportSubURI)) if self.AVTransportSubURI else '')
       self.events_add('AVTransport', (('AVTransportURI', self.AVTransportURI), ('AVTransportURIMetaData', self.AVTransportURIMetaData), ('CurrentTrackMetaData', self.AVTransportURIMetaData), ('CurrentTrackURI', self.AVTransportURI)))
       if prev_transp_state == "TRANSITIONING":
         self.send_command((0xA0000002, ''))
@@ -2623,9 +2851,11 @@ class DLNARenderer:
         else:
           self.IPCmpcControlerInstance.Player_image = False
           self.send_command((0xA0000004, ''))
-      self.logger.log('Contenu en cours: %s | %s | %s' % ('vidéo' if 'video' in upnp_class.lower() else 'audio' if 'audio' in upnp_class.lower() else 'image' if 'image' in upnp_class.lower() else '', title, self.AVTransportURI), 0)
+      self.logger.log('Contenu en cours: %s | %s | %s' % ('vidéo' if 'video' in upnp_class.lower() else 'audio' if 'audio' in upnp_class.lower() else 'image' if 'image' in upnp_class.lower() else '', title, self.AVTransportURI + ((' + ' + self.AVTransportSubURI) if self.AVTransportSubURI else '')), 0)
       if self.rot_image:
         self.logger.log('Rotation du contenu de %s°' % rotation, 2)
+      if self.IPCmpcControlerInstance.Player_rotation:
+        self.logger.log('Rotation du contenu de %s°' % self.IPCmpcControlerInstance.Player_rotation, 2)
     elif acti.lower() == 'Play'.lower():
       if self.TransportState == "NO_MEDIA_PRESENT":
         return '701', None
@@ -2699,6 +2929,14 @@ class DLNARenderer:
       out_args['CurrentTransportState'] = self.TransportState
       out_args['CurrentTransportStatus'] = 'OK'
       out_args['CurrentSpeed'] = '1'
+    elif acti.lower() == 'GetMute'.lower():
+      out_args['CurrentMute'] = self.Mute
+    elif acti.lower() == 'GetVolume'.lower():
+      out_args['CurrentVolume'] = self.Volume
+    elif acti.lower() == 'SetMute'.lower():
+      self.IPCmpcControlerInstance.set_mute(True if in_args['DesiredMute'.lower()] == "1" else False)
+    elif acti.lower() == 'SetVolume'.lower():
+      self.IPCmpcControlerInstance.set_volume(int(float(in_args['DesiredVolume'.lower()])))
     elif acti.lower() == 'GetCurrentTransportActions'.lower():
       out_args['Actions'] = {'TRANSITIONING': "Stop", 'STOPPED': "Play,Seek",'PAUSED_PLAYBACK': "Play,Stop,Seek" ,'PLAYING': "Pause,Stop,Seek"}.get(self.TransportState, "")
     else:
@@ -2762,9 +3000,10 @@ if __name__ == '__main__':
   parser.add_argument('--name', '-n', metavar='RENDERER_NAME', help='nom du renderer [DLNAmpcRenderer par défaut]', default='DLNAmpcRenderer')
   parser.add_argument('--minimize', '-m', help='passage en mode minimisé quand inactif [désactivé par défaut]', action='store_true')
   parser.add_argument('--fullscreen', '-f', help='passage en mode plein écran à chaque session [désactivé par défaut]', action='store_true')
-  parser.add_argument('--rotate_jpeg', '-r', help='rotation automatique des images jpeg [désactivé par défaut]', action='store_true')
+  parser.add_argument('--rotate_jpeg', '-r', help='rotation automatique des images jpeg (n: désactivé, k: par envoi de touche, j: par jpegtrans) [désactivé par défaut]', choices=['n', 'k', 'j'], default='n')
   parser.add_argument('--wmpdmc_no_mkv', '-w', help='masque la prise en charge du format matroska à WMPDMC pour permettre le contrôle distant [désactivé par défaut]', action='store_true')
   parser.add_argument('--trust_controler', '-t', help='désactive la vérification des adresses avant leur transmission à mpc [désactivé par défaut]', action='store_true')
+  parser.add_argument('--search_subtitles', '-s', help='active la recherche systématique de sous-titres [désactivé par défaut]', action='store_true')
   parser.add_argument('--verbosity', '-v', metavar='VERBOSE', help='niveau de verbosité de 0 à 2 [0 par défaut]', type=int, choices=[0, 1, 2], default=0)
 
   args = parser.parse_args()
@@ -2772,7 +3011,7 @@ if __name__ == '__main__':
     NAME = args.name
     UDN = 'uuid:' + str(uuid.uuid5(uuid.NAMESPACE_URL, args.name))
     DLNARenderer.Device_SCPD = DLNARenderer.Device_SCPD.replace('DLNAmpcRenderer', html.escape(NAME)).replace('uuid:' + str(uuid.uuid5(uuid.NAMESPACE_URL, 'DLNAmpcRenderer')), UDN)
-  Renderer = DLNARenderer(args.port, args.minimize, args.fullscreen, args.rotate_jpeg, args.wmpdmc_no_mkv, args.trust_controler, args.verbosity)
+  Renderer = DLNARenderer(args.port, args.minimize, args.fullscreen, args.rotate_jpeg, args.wmpdmc_no_mkv, args.trust_controler, args.search_subtitles, args.verbosity)
   print('Appuyez sur "S" ou fermez mpc pour stopper')
   print('Appuyez sur "M" pour activer/désactiver le passage en mode minimisé quand inactif - mode actuel: %s' % ('activé' if Renderer.Minimize else 'désactivé'))
   print('Appuyez sur "F" pour activer/désactiver le passage en mode plein écran à chaque session - mode actuel: %s' % ('activé' if Renderer.FullScreen else 'désactivé'))
