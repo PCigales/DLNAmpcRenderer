@@ -414,6 +414,8 @@ class IPCmpcControler(threading.Thread):
             self.Player_events.append(('TransportState', "PLAYING"))
             self.Player_event_event.set()
             self.logger.log('Lecteur - événement enregistré: %s = "%s"' % ('TransportState', "PLAYING"), 1)
+            if self.Player_image:
+              self.send_command(0xA0000005, '')
           elif not_msg == '1':
             self.Player_paused = True
             if self.Player_status == "PLAYING" and not self.Player_image:
@@ -479,7 +481,7 @@ class IPCmpcControler(threading.Thread):
             self.logger.log('Lecteur - événement enregistré: %s = "%s"' % ('TransportState', "PLAYING"), 1)
             if self.Player_fullscreen:
               time.sleep(0.1)
-              self.send_command(0xA0004000, '')
+              self.send_fullscreen()
           else:
             self.Player_status = "STOPPED"
             self.Player_events.append(('TransportState', "STOPPED"))
@@ -524,6 +526,11 @@ class IPCmpcControler(threading.Thread):
   def send_restore(self):
     user32.SendMessageW(HWND(self.wnd_mpc), UINT(0x0112), WPARAM(0xF120), LPARAM(0))
     self.logger.log('Lecteur - commande envoyée: restore', 2)
+
+  def send_fullscreen(self):
+    if user32.GetWindowLongPtrW(HWND(self.wnd_mpc), INT(-16)) & 0x00c00000:
+      self.send_command(0xA0004000, '')
+    user32.SetForegroundWindow(self.wnd_mpc)
 
   def send_commands(self):
     while self.Cmd_buffer[0] == "run":
@@ -2165,7 +2172,6 @@ class DLNARenderer:
     self.port = RendererPort
     self.Minimize = Minimize
     self.FullScreen = FullScreen
-    self.full_screen = FullScreen
     self.JpegRotate = JpegRotate
     self.WMPDMCHideMKV = WMPDMCHideMKV
     self.TrustControler = TrustControler
@@ -2366,7 +2372,6 @@ class DLNARenderer:
         elif event[0] == 'TransportState':
           self.TransportState = event[1].upper()
           if self.TransportState == "STOPPED":
-            self.full_screen = self.FullScreen
             if self.Minimize:
               if self.IPCmpcControlerInstance.Player_image:
                 self.send_delayed_minimize()
@@ -2375,9 +2380,8 @@ class DLNARenderer:
           elif self.TransportState in ('PLAYING', 'PAUSED_PLAYBACK'):
             if self.Minimize:
               self.IPCmpcControlerInstance.send_restore()
-            if self.full_screen:
-              self.full_screen = False
-              self.send_command((0xA0004000, ''))
+            if self.FullScreen:
+              self.IPCmpcControlerInstance.send_fullscreen()
           self.events_add('AVTransport', (('TransportState', self.TransportState), ('CurrentTransportActions', {'TRANSITIONING': "Stop", 'STOPPED': "Play,Seek",'PAUSED_PLAYBACK': "Play,Stop,Seek" ,'PLAYING': "Pause,Stop,Seek"}.get(self.TransportState, ""))))
         elif event[0] == 'TransportStatus' and event[1].upper() == "ERROR_OCCURRED":
           self.events_add('AVTransport', (('TransportStatus', "ERROR_OCCURRED"),))
@@ -2708,7 +2712,11 @@ class DLNARenderer:
       action_id = self.ActionsReceived
       self.ActionsReceived += 1
     self.logger.log('Mise en queue de l\'action %d %s-%s' % (action_id, servi, acti), 2)
-    res, out_args = self._process_action(action_id, servi, acti, args, agent)
+    try:
+      res, out_args = self._process_action(action_id, servi, acti, args, agent)
+    except:
+      res = '701'
+      out_args = None
     if res == '200':
       self.logger.log('Succès du traitement de l\'action %d %s-%s' % (action_id, servi, acti), 1)
     else:
@@ -2785,7 +2793,6 @@ if __name__ == '__main__':
         print('Passage en mode minimisé quand inactif: %s' % ('activé' if Renderer.Minimize else 'désactivé'))
       elif k == b'F':
         Renderer.FullScreen = not Renderer.FullScreen
-        Renderer.full_screen = Renderer.FullScreen
         print('Passage en mode plein écran à chaque session: %s' % ('activé' if Renderer.FullScreen else 'désactivé'))
     if k != b'S':
       Renderer.mpc_shutdown_event.wait(0.5)
