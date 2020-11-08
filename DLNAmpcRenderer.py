@@ -528,6 +528,7 @@ class IPCmpcControler(threading.Thread):
     self.logger.log('Lecteur - commande envoyée: restore', 2)
 
   def send_fullscreen(self):
+    user32.ShowWindow(HWND(self.wnd_mpc), INT(9))
     if user32.GetWindowLongPtrW(HWND(self.wnd_mpc), INT(-16)) & 0x00c00000:
       self.send_command(0xA0004000, '')
     user32.SetForegroundWindow(self.wnd_mpc)
