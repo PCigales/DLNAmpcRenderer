@@ -22,7 +22,7 @@ DLNAmpcRenderer [-h] [--port RENDERER_TCP_PORT] [--name RENDERER_NAME] [--minimi
 --name RENDERER_NAME: the name of the renderer, used to generate the uuid  
 --minimize: when set, minimizes the window of mpc-hc when inactive and restore it to its previous size when a playback is launched (useful when displaying photos as some controlers stop the playback between two consecutive pictures or when playing music as there is no use showing the window)  
 --fullscreen: when set, makes mpc-hc go fullscreen each time a playback starts (can be combined with 'minimize')  
---rotate_jpeg ROTATE_MODE: when set to 'k' or 'j', tries to read the orientation metadata of jpeg pictures, and sends an accordingly rotation command to mpc-hc if 'k', or sends a rotated picture with jpegtran to mpc_hc if 'j'  
+--rotate_jpeg ROTATE_MODE: when set to 'k' or 'j', tries to read the orientation metadata of jpeg pictures, and sends an accordingly rotation command to mpc-hc if 'k' (needs mpc-hc version 1.9.8.26 or higher to work properly), or sends a rotated picture with jpegtran to mpc_hc if 'j'  
 --wmpdmc_no_mkv: when set, Windows Media Player Digital Media Controller will transcode 'mkv' (matroska) files to 'mpegts' before streaming the content, allowing remote control of the playback, otherwise, the 'mkv' file will be streamed as it is, and the seekbar will probably be inactive in WMPDMC (but available in mpc-hc)  
 --trust_controler: when set, the URL of the content sent to the renderer is not checked before being passed to mpc-hc  
 --search_subtitles: when set, always requests subtitles, trying different extensions if no subtitle uri is provided by the controler or the server (may slow down the process)  
