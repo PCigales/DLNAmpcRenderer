@@ -388,6 +388,7 @@ class IPCmpcControler(threading.Thread):
     self.Player_time_pos = ""
     self.Player_duration = ""
     self.Player_mute = False
+    self.mute_changed = False
     self.Player_volume = 0
     self.Player_paused = True
     self.Player_event_event = threading.Event()
@@ -582,6 +583,9 @@ class IPCmpcControler(threading.Thread):
   def set_mute(self, mute):
     if self.get_mute() != mute:
       self.send_key(909)
+      self.send_key(819)
+      self.send_key(819)
+    self.mute_changed = True
 
   def get_volume(self):
     return user32.SendMessageW(HWND(self.wnd_mpc_volume), UINT(0x400), WPARAM(909), LPARAM(0))
@@ -609,9 +613,10 @@ class IPCmpcControler(threading.Thread):
       if self.Cmd_buffer[0] == "run":
         if self.Player_status == "PLAYING" or self.Player_status == "PAUSED_PLAYBACK":
           self.send_command(0xA0003004, '')
-        if not iter:
+        if self.mute_changed or not iter:
           t = self.get_mute()
           if t != self.Player_mute:
+            self.mute_changed = False
             self.Player_mute = t
             self.Player_events.append(('Mute', self.Player_mute))
             self.Player_event_event.set()
@@ -2444,6 +2449,7 @@ class DLNARenderer:
     self.Mute = "0"
     self.Volume = "0"
     self.AVTransportURI = ""
+    self.AVTransportSubURI = ""
     self.AVTransportURIMetaData = ""
     self.RelativeTimePosition = "0:00:00"
     self.CurrentMediaDuration = "0:00:00"
@@ -2813,7 +2819,6 @@ class DLNARenderer:
             break
       self.IPCmpcControlerInstance.Player_subtitles = self.AVTransportSubURI
       self.rot_image = b''
-      self.Rotation = 0
       if 'object.item.imageItem'.lower() in upnp_class.lower() and self.JpegRotate == 'j':
         image = None
         try:
