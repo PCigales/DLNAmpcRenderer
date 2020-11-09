@@ -420,6 +420,8 @@ class IPCmpcControler(threading.Thread):
           elif not_msg == '2':
             if self.Player_subtitles:
               self.send_subtitles(self.Player_subtitles)
+            if self.Player_image:
+               self.send_rotate(self.Player_rotation)
           elif not_msg == '4':
             self.Player_events.append(('TransportStatus', "ERROR_OCCURRED"))
             self.Player_event_event.set()
@@ -433,10 +435,6 @@ class IPCmpcControler(threading.Thread):
             self.logger.log('Lecteur - événement enregistré: %s = "%s"' % ('TransportState', "PLAYING"), 1)
             if self.Player_image:
               self.send_command(0xA0000005, '')
-              self.send_rotate(self.Player_rotation)
-            #if self.Player_subtitles:
-              #self.send_subtitles(self.Player_subtitles)
-              #self.Player_subtitles = ''
           elif not_msg == '1':
             self.Player_paused = True
             if self.Player_status == "PLAYING" and not self.Player_image:
@@ -592,9 +590,12 @@ class IPCmpcControler(threading.Thread):
     user32.SendMessageW(HWND(self.wnd_mpc_volume), UINT(0x422), WPARAM(0), volume)
 
   def send_rotate(self, rotation):
-    for i in range(rotation // 90):
+    if rotation == 90:
       self.send_key(882)
-      time.sleep(0.1)
+    elif rotation == 270:
+      self.send_key(881)
+    elif rotation == 180:
+      self.send_key(878)
 
   def send_commands(self):
     iter = 0
@@ -2831,6 +2832,7 @@ class DLNARenderer:
         if rotation:
           self.rot_image = self._rotate_jpeg(image, rotation) or b''
         image = b''
+      self.IPCmpcControlerInstance.Player_rotation = 0
       if 'object.item.imageItem'.lower() in upnp_class.lower() and self.JpegRotate == 'k':
         self.IPCmpcControlerInstance.Player_rotation = {'upper-left': 0, 'lower-right': 180, 'upper-right': 90, 'lower-left': 270}.get(_jpeg_exif_orientation(self.AVTransportURI), 0)
       self.AVTransportURIMetaData = '<DIDL-Lite xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" xmlns:dlna="urn:schemas-dlna-org:metadata-1-0/" xmlns:sec="http://www.sec.co.kr/"><item><dc:title>%s</dc:title><upnp:class>%s</upnp:class><res protocolInfo="%s">%s</res>%s</item></DIDL-Lite>' % (html.escape(title), upnp_class, html.escape(protocol_info), html.escape(uri), '<sec:CaptionInfoEx sec:type="%s">%s</sec:CaptionInfoEx>' %(html.escape(caption_type), html.escape(self.AVTransportSubURI)) if self.AVTransportSubURI else '')
