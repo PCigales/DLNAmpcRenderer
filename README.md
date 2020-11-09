@@ -5,12 +5,12 @@ DLNAmpcRenderer is an application written in Python 3 designed as a wrapper for 
 
 To install the application:
 
-    of course, install Python 3
-    copy DLNAmpcRenderer.py, icon.png and mpc.bat in the same folder
-    install mpc-hc (https://github.com/clsid2/mpc-hc/releases)
-    open mpc.bat and, if needed, change the path of mpc-hc executable
-    optionally, install jpegtran (https://jpegclub.org/jpegtran ), copy jpegtrans.bat, and change the path of jpegtran executable
-    allow mpc-hc and python to communicate through the firewall (for more precise needs, see below)
+    - of course, install Python 3
+    - copy DLNAmpcRenderer.py, icon.png and mpc.bat in the same folder
+    - install mpc-hc (https://github.com/clsid2/mpc-hc/releases)
+    - open mpc.bat and, if needed, change the path of mpc-hc executable
+    - optionally, install jpegtran (https://jpegclub.org/jpegtran ), copy jpegtrans.bat, and change the path of jpegtran executable
+    - allow mpc-hc and python to communicate through the firewall (for more precise needs, see below)
 
 To run the application:
 
@@ -18,15 +18,15 @@ DLNAmpcRenderer -h to display the complete syntax of command line and abbreviate
 
 DLNAmpcRenderer [-h] [--port RENDERER_TCP_PORT] [--name RENDERER_NAME] [--minimize] [--fullscreen] [--rotate_jpeg ROTATE_MODE] [--wmpdmc_no_mkv] [--trust_controler] [--search_subtitles] [--verbosity VERBOSE]
 
---port RENDERER_TCP_PORT: the port used by the renderer on the local machine sent to the controlers in the advertisements and the answers to the search requests
---name RENDERER_NAME: the name of the renderer, used to generate the uuid
---minimize: when set, minimizes the window of mpc-hc when inactive and restore it to its previous size when a playback is launched (useful when displaying photos as some controlers stop the playback between two consecutive pictures or when playing music as there is no use showing the window)
---fullscreen: when set, makes mpc-hc go fullscreen each time a playback starts (can be combined with 'minimize')
---rotate_jpeg ROTATE_MODE: when set to 'k' or 'j', tries to read the orientation metadata of jpeg pictures, and sends an accordingly rotation command to mpc-hc if 'k', or sends a rotated picture with jpegtran to mpc_hc if 'j'
---wmpdmc_no_mkv: when set, Windows Media Player Digital Media Controller will transcode 'mkv' (matroska) files to 'mpegts' before streaming the content, allowing remote control of the playback, otherwise, the 'mkv' file will be streamed as it is, and the seekbar will probably be inactive in WMPDMC (but available in mpc-hc)
---trust_controler: when set, the URL of the content sent to the renderer is not checked before being passed to mpc-hc
---search_subtitles: when set, always requests subtitles, trying different extensions if no subtitle uri is provided by the controler or the server (may slow down the process)
---verbosity VERBOSE: for troubleshooting purposes, from 0 (default) to 2
+--port RENDERER_TCP_PORT: the port used by the renderer on the local machine sent to the controlers in the advertisements and the answers to the search requests  
+--name RENDERER_NAME: the name of the renderer, used to generate the uuid  
+--minimize: when set, minimizes the window of mpc-hc when inactive and restore it to its previous size when a playback is launched (useful when displaying photos as some controlers stop the playback between two consecutive pictures or when playing music as there is no use showing the window)  
+--fullscreen: when set, makes mpc-hc go fullscreen each time a playback starts (can be combined with 'minimize')  
+--rotate_jpeg ROTATE_MODE: when set to 'k' or 'j', tries to read the orientation metadata of jpeg pictures, and sends an accordingly rotation command to mpc-hc if 'k', or sends a rotated picture with jpegtran to mpc_hc if 'j'  
+--wmpdmc_no_mkv: when set, Windows Media Player Digital Media Controller will transcode 'mkv' (matroska) files to 'mpegts' before streaming the content, allowing remote control of the playback, otherwise, the 'mkv' file will be streamed as it is, and the seekbar will probably be inactive in WMPDMC (but available in mpc-hc)  
+--trust_controler: when set, the URL of the content sent to the renderer is not checked before being passed to mpc-hc  
+--search_subtitles: when set, always requests subtitles, trying different extensions if no subtitle uri is provided by the controler or the server (may slow down the process)  
+--verbosity VERBOSE: for troubleshooting purposes, from 0 (default) to 2  
 
 Example: DLNAmpcRenderer -p 9100 -m -f -r j
 
