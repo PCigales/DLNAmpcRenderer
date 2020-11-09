@@ -2616,7 +2616,7 @@ class DLNARenderer:
       return None
     b = ctypes.create_string_buffer(0x100000)
     try:
-      process = subprocess.Popen(r'"%s\%s"' % (IPCmpcControler.SCRIPT_PATH, 'jpegtrans.bat'), env={**os.environ, 'jpegtrans_rot': str(angle), 'jpegtrans_input': r'\\.\pipe\write_' + urllib.parse.quote(name, safe=''), 'jpegtrans_output': r'\\.\pipe\read_' + urllib.parse.quote(name, safe='')}, creationflags=subprocess.CREATE_NEW_CONSOLE, startupinfo=subprocess.STARTUPINFO(dwFlags=subprocess.STARTF_USESHOWWINDOW, wShowWindow=6))
+      process = subprocess.Popen(r'"%s\%s"' % (IPCmpcControler.SCRIPT_PATH, 'jpegtran.bat'), env={**os.environ, 'jpegtrans_rot': str(angle), 'jpegtrans_input': r'\\.\pipe\write_' + urllib.parse.quote(name, safe=''), 'jpegtrans_output': r'\\.\pipe\read_' + urllib.parse.quote(name, safe='')}, creationflags=subprocess.CREATE_NEW_CONSOLE, startupinfo=subprocess.STARTUPINFO(dwFlags=subprocess.STARTF_USESHOWWINDOW, wShowWindow=6))
     except:
       try:
         kernel32.DisconnectNamedPipe(pipe_w)
@@ -3002,7 +3002,7 @@ if __name__ == '__main__':
   parser.add_argument('--name', '-n', metavar='RENDERER_NAME', help='nom du renderer [DLNAmpcRenderer par défaut]', default='DLNAmpcRenderer')
   parser.add_argument('--minimize', '-m', help='passage en mode minimisé quand inactif [désactivé par défaut]', action='store_true')
   parser.add_argument('--fullscreen', '-f', help='passage en mode plein écran à chaque session [désactivé par défaut]', action='store_true')
-  parser.add_argument('--rotate_jpeg', '-r', help='rotation automatique des images jpeg (n: désactivé, k: par envoi de touche, j: par jpegtrans) [désactivé par défaut]', choices=['n', 'k', 'j'], default='n')
+  parser.add_argument('--rotate_jpeg', '-r', metavar='ROTATE_MODE', help='rotation automatique des images jpeg (n: désactivé, k: par envoi de touche, j: par jpegtrans) [désactivé par défaut]', choices=['n', 'k', 'j'], default='n')
   parser.add_argument('--wmpdmc_no_mkv', '-w', help='masque la prise en charge du format matroska à WMPDMC pour permettre le contrôle distant [désactivé par défaut]', action='store_true')
   parser.add_argument('--trust_controler', '-t', help='désactive la vérification des adresses avant leur transmission à mpc [désactivé par défaut]', action='store_true')
   parser.add_argument('--search_subtitles', '-s', help='active la recherche systématique de sous-titres [désactivé par défaut]', action='store_true')
