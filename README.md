@@ -5,12 +5,12 @@ DLNAmpcRenderer is an application written in Python 3 designed as a wrapper for 
 
 To install the application:
 
-    - of course, install Python 3
-    - copy DLNAmpcRenderer.py, icon.png and mpc.bat in the same folder
-    - install mpc-hc (https://github.com/clsid2/mpc-hc/releases)
-    - open mpc.bat and, if needed, change the path of mpc-hc executable
-    - optionally, install jpegtran (https://jpegclub.org/jpegtran ), copy jpegtrans.bat, and change the path of jpegtran executable
-    - allow mpc-hc and python to communicate through the firewall (for more precise needs, see below)
+  - of course, install Python 3
+  - copy DLNAmpcRenderer.py, icon.png and mpc.bat in the same folder
+  - install mpc-hc (https://github.com/clsid2/mpc-hc/releases)
+  - open mpc.bat and, if needed, change the path of mpc-hc executable
+  - optionally, install jpegtran (https://jpegclub.org/jpegtran ), copy jpegtrans.bat, and change the path of jpegtran executable
+  - allow mpc-hc and python to communicate through the firewall (for more precise needs, see below)
 
 To run the application:
 
