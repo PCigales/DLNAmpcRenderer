@@ -2616,8 +2616,8 @@ class DLNARenderer:
   def _rotate_jpeg(self, image, angle):
     try:
       name = NAME + ':%s' % self.port
-      pipe_w = HANDLE(kernel32.CreateNamedPipeW(LPCWSTR(r'\\.\pipe\write_' + urllib.parse.quote(name, safe='')), DWORD(0x00000003), DWORD(0), DWORD(1), DWORD(0x100000), DWORD(0x100000), DWORD(0), HANDLE(0)))
-      pipe_r = HANDLE(kernel32.CreateNamedPipeW(LPCWSTR(r'\\.\pipe\read_' + urllib.parse.quote(name, safe='')), DWORD(0x00000003), DWORD(0), DWORD(1), DWORD(0x100000), DWORD(0x100000), DWORD(0), HANDLE(0)))
+      pipe_w = HANDLE(kernel32.CreateNamedPipeW(LPCWSTR(r'\\.\pipe\write_' + urllib.parse.quote(name, safe='')), DWORD(0x00000002), DWORD(0), DWORD(1), DWORD(0x100000), DWORD(0x100000), DWORD(0), HANDLE(0)))
+      pipe_r = HANDLE(kernel32.CreateNamedPipeW(LPCWSTR(r'\\.\pipe\read_' + urllib.parse.quote(name, safe='')), DWORD(0x00000001), DWORD(0), DWORD(1), DWORD(0x100000), DWORD(0x100000), DWORD(0), HANDLE(0)))
     except:
       return None
     b = ctypes.create_string_buffer(0x100000)
@@ -2976,7 +2976,7 @@ class DLNARenderer:
     self.IPCmpcControlerInstance.start()
     self.IPCmpcControlerInstance.Player_event_event.wait()
     if not self.IPCmpcControlerInstance.wnd_ctrl:
-      Renderer.mpc_shutdown_event.set()
+      self.mpc_shutdown_event.set()
       return
     if self.Minimize:
       self.IPCmpcControlerInstance.send_minimize()
