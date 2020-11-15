@@ -509,12 +509,7 @@ class IPCmpcControler(threading.Thread):
               time.sleep(0.1)
               self.send_fullscreen()
           else:
-            #self.Player_status = "STOPPED"
-            #self.Player_events.append(('TransportState', "STOPPED"))
-            #self.Player_time_pos = ""
-            #self.Player_event_event.set()
             self.send_command(0xA0000002, '')
-            #self.logger.log('Lecteur - événement enregistré: %s = "%s"' % ('TransportState', "STOPPED"), 1)
       if self.Msg_buffer[0] == "run":
         self.Msg_event.wait()
 
