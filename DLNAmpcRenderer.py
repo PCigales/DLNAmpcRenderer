@@ -564,7 +564,7 @@ class IPCmpcControler(threading.Thread):
   def send_fullscreen(self):
     if not self.wnd_mpc:
       return
-    user32.ShowWindow(HWND(self.wnd_mpc), INT(9))
+    user32.ShowWindow(HWND(self.wnd_mpc), INT(8))
     if user32.GetWindowLongPtrW(HWND(self.wnd_mpc), INT(-16)) & 0x00c00000:
       self.send_command(0xA0004000, '')
     user32.SetForegroundWindow(self.wnd_mpc)
