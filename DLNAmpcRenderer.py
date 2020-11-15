@@ -637,14 +637,14 @@ class IPCmpcControler(threading.Thread):
           self.send_command(0xA0003004, '')
         if self.mute_changed or not iter:
           t = self.get_mute()
-          if t and t != self.Player_mute:
+          if t != None and t != self.Player_mute:
             self.mute_changed = False
             self.Player_mute = t
             self.Player_events.append(('Mute', self.Player_mute))
             self.Player_event_event.set()
             self.logger.log('Lecteur - événement enregistré: %s = "%s"' % ('Mute', self.Player_mute), 2)
           t = self.get_volume()
-          if t and t != self.Player_volume:
+          if t != None and t != self.Player_volume:
              self.Player_volume = t
              self.Player_events.append(('Volume', self.Player_volume))
              self.Player_event_event.set()
@@ -2846,7 +2846,6 @@ class DLNARenderer:
         try:
           if r'://' in uri:
             f = _open_url(uri, method='GET')
-            
           else:
             f = open(uri, 'rb')
           image = f.read()
