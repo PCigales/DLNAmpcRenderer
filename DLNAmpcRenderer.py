@@ -362,6 +362,7 @@ class IPCmpcControler(threading.Thread):
             self.Player_event_event.set()
             self.wnd_mpc_mute = user32.FindWindowExW(HWND(self.wnd_mpc), HWND(0), LPCWSTR('ToolbarWindow32'), LPCWSTR(0))
             self.wnd_mpc_volume = user32.FindWindowExW(HWND(self.wnd_mpc_mute), HWND(0), LPCWSTR('msctls_trackbar32'), LPCWSTR(0))
+            self.set_title(self.title_name)
           else:
             if not_code == 0x5000000B:
               self.Msg_buffer[0] = "quit"
@@ -370,9 +371,10 @@ class IPCmpcControler(threading.Thread):
         return user32.DefWindowProcW(HWND(hWnd), MSG(Msg), WPARAM(wParam), LPARAM(lParam))
       return 0
 
-  def __init__(self, verbosity=0):
+  def __init__(self, title_name = 'mpc', verbosity=0):
     self.verbosity = verbosity
     self.logger = log_event(verbosity)
+    self.title_name = title_name
     threading.Thread.__init__(self)
     self.WndProc = WNDPROC(self._PyWndProcedure)
     self.wnd_ctrl = None
@@ -391,11 +393,13 @@ class IPCmpcControler(threading.Thread):
     self.mute_changed = False
     self.Player_volume = 0
     self.Player_paused = True
-    self.Player_event_event = threading.Event()
     self.Player_image = False
     self.Player_fullscreen = False
     self.Player_rotation = 0
     self.Player_subtitles = ""
+    self.Player_title = ""
+    self.stopped_received = False
+    self.Player_event_event = threading.Event()
 
   def manage_incoming_msg(self):
     while self.Msg_buffer[0] == "run":
@@ -411,6 +415,7 @@ class IPCmpcControler(threading.Thread):
             self.Player_time_pos = ""
             self.Player_event_event.set()
             self.logger.log('Lecteur - événement enregistré: %s = "%s"' % ('TransportState', "STOPPED"), 1)
+            self.stopped_received = time.time()
           elif not_msg == '1':
             self.Player_time_pos = ""
             self.Player_duration = ""
@@ -419,6 +424,7 @@ class IPCmpcControler(threading.Thread):
             self.Player_event_event.set()
             self.logger.log('Lecteur - événement enregistré: %s = "%s"' % ('TransportState', "TRANSITIONING"), 2)
           elif not_msg == '2':
+            self.set_title(self.title_name + ' - ' + self.Player_title)
             if self.Player_subtitles:
               self.send_subtitles(self.Player_subtitles)
             if self.Player_image:
@@ -503,11 +509,12 @@ class IPCmpcControler(threading.Thread):
               time.sleep(0.1)
               self.send_fullscreen()
           else:
-            self.Player_status = "STOPPED"
-            self.Player_events.append(('TransportState', "STOPPED"))
-            self.Player_time_pos = ""
-            self.Player_event_event.set()
-            self.logger.log('Lecteur - événement enregistré: %s = "%s"' % ('TransportState', "STOPPED"), 1)
+            #self.Player_status = "STOPPED"
+            #self.Player_events.append(('TransportState', "STOPPED"))
+            #self.Player_time_pos = ""
+            #self.Player_event_event.set()
+            self.send_command(0xA0000002, '')
+            #self.logger.log('Lecteur - événement enregistré: %s = "%s"' % ('TransportState', "STOPPED"), 1)
       if self.Msg_buffer[0] == "run":
         self.Msg_event.wait()
 
@@ -623,6 +630,11 @@ class IPCmpcControler(threading.Thread):
     elif rotation == 180:
       self.send_key(878)
 
+  def set_title(self, title):
+    if not self.wnd_mpc:
+      return
+    user32.SetWindowTextW(HWND(self.wnd_mpc), LPCWSTR(title))
+
   def send_commands(self):
     iter = 0
     while self.Cmd_buffer[0] == "run":
@@ -635,6 +647,15 @@ class IPCmpcControler(threading.Thread):
       if self.Cmd_buffer[0] == "run":
         if self.Player_status == "PLAYING" or self.Player_status == "PAUSED_PLAYBACK":
           self.send_command(0xA0003004, '')
+        if self.stopped_received:
+          if self.Player_status == "STOPPED":
+            self.set_title(self.title_name)
+            if time.time() - self.stopped_received >= 0.5:
+              self.stopped_received = False
+            if self.Player_status != "STOPPED":
+              self.set_title(self.title_name + ' - ' + self.Player_title)
+          else:
+            self.stopped_received = False
         if self.mute_changed or not iter:
           t = self.get_mute()
           if t != None and t != self.Player_mute:
@@ -2393,7 +2414,7 @@ class DLNARenderer:
     self.WMPDMCHideMKV = WMPDMCHideMKV
     self.TrustControler = TrustControler
     self.SearchSubtitles = SearchSubtitles
-    self.IPCmpcControlerInstance = IPCmpcControler(verbosity=verbosity)
+    self.IPCmpcControlerInstance = IPCmpcControler(title_name=NAME + ':%s' % RendererPort, verbosity=verbosity)
     self.IPCmpcControlerInstance.Player_fullscreen = FullScreen
     self.is_search_manager_running = None
     self.is_request_manager_running = None
@@ -2866,6 +2887,7 @@ class DLNARenderer:
       self.events_add('AVTransport', (('AVTransportURI', self.AVTransportURI), ('AVTransportURIMetaData', self.AVTransportURIMetaData), ('CurrentTrackMetaData', self.AVTransportURIMetaData), ('CurrentTrackURI', self.AVTransportURI)))
       if prev_transp_state == "TRANSITIONING":
         self.send_command((0xA0000002, ''))
+      self.IPCmpcControlerInstance.Player_title = title if title else self.AVTransportURI.rsplit('/' if r'://' in self.AVTransportURI else '\\', 1)[-1]
       if self.IPCmpcControlerInstance.Player_status.upper() in ("NO_MEDIA_PRESENT", "STOPPED") and prev_transp_state in ("NO_MEDIA_PRESENT", "STOPPED"):
         self.TransportState = "STOPPED"
         self.RelativeTimePosition = "0:00:00"
@@ -2929,9 +2951,8 @@ class DLNARenderer:
       if not in_args['unit'].upper() in ("REL_TIME", "ABS_TIME"):
         return '701', None
       prev_transp_state = self.TransportState
-      self.send_command((0xA0002000, str(sum(int(t[0])*t[1] for t in zip(reversed(in_args['target'].split(':')), [1,60,3600])))))
-      if prev_transp_state == "STOPPED":
-        self.send_command((0xA0000002, ''))
+      if prev_transp_state != "STOPPED":
+        self.send_command((0xA0002000, str(sum(int(t[0])*t[1] for t in zip(reversed(in_args['target'].split(':')), [1,60,3600])))))
     elif acti.lower() == 'GetPositionInfo'.lower():
       if self.TransportState == "NO_MEDIA_PRESENT":
         out_args = {'Track': '0', 'TrackDuration': '0:00:00', 'TrackMetaData': '', 'TrackURI': '', 'RelTime': '0:00:00', 'AbsTime': '0:00:00', 'RelCount': '2147483647', 'AbsCount': '2147483647'}
