@@ -531,6 +531,8 @@ class IPCmpcControler(threading.Thread):
     self.Cmd_Event.set()
 
   def send_command(self, cmd_code, cmd_msg):
+    if not self.wnd_mpc:
+      return
     buf = ctypes.create_string_buffer(cmd_msg.encode('utf-16-le') + b'\x00')
     copydata = COPYDATA_STRUCT()
     copydata.dwData = ULONG_PTR(cmd_code)
@@ -540,24 +542,34 @@ class IPCmpcControler(threading.Thread):
     self.logger.log('Lecteur - commande envoyée - code:%s - message:%s' % (hex(cmd_code), cmd_msg), 2)
 
   def send_key(self, key_code):
+    if not self.wnd_mpc:
+      return
     user32.SendMessageW(HWND(self.wnd_mpc), UINT(0x111), WPARAM(key_code), LPARAM(0))
     self.logger.log('Lecteur - touche envoyée - code:%s' % key_code, 2)
 
   def send_minimize(self):
+    if not self.wnd_mpc:
+      return
     user32.SendMessageW(HWND(self.wnd_mpc), UINT(0x0112), WPARAM(0xF020), LPARAM(0))
     self.logger.log('Lecteur - commande envoyée: minimize', 2)
   
   def send_restore(self):
+    if not self.wnd_mpc:
+      return
     user32.SendMessageW(HWND(self.wnd_mpc), UINT(0x0112), WPARAM(0xF120), LPARAM(0))
     self.logger.log('Lecteur - commande envoyée: restore', 2)
 
   def send_fullscreen(self):
+    if not self.wnd_mpc:
+      return
     user32.ShowWindow(HWND(self.wnd_mpc), INT(9))
     if user32.GetWindowLongPtrW(HWND(self.wnd_mpc), INT(-16)) & 0x00c00000:
       self.send_command(0xA0004000, '')
     user32.SetForegroundWindow(self.wnd_mpc)
 
   def send_subtitles(self, uri):
+    if not self.wnd_mpc:
+      return
     open_thread = threading.Thread(target=self.send_key, args=(809,))
     open_thread.start()
     wnd_open = 0
@@ -578,9 +590,13 @@ class IPCmpcControler(threading.Thread):
     user32.SendMessageW(HWND(wnd_ok), UINT(0xf5), WPARAM(0), LPARAM(0))
 
   def get_mute(self):
+    if not self.wnd_mpc:
+      return
     return True if user32.SendMessageW(HWND(self.wnd_mpc_mute), UINT(0x40a), WPARAM(909), LPARAM(0)) else False
 
   def set_mute(self, mute):
+    if not self.wnd_mpc:
+      return
     if self.get_mute() != mute:
       self.send_key(909)
       self.send_key(819)
@@ -588,12 +604,18 @@ class IPCmpcControler(threading.Thread):
     self.mute_changed = True
 
   def get_volume(self):
+    if not self.wnd_mpc:
+      return
     return user32.SendMessageW(HWND(self.wnd_mpc_volume), UINT(0x400), WPARAM(909), LPARAM(0))
 
   def set_volume(self, volume):
+    if not self.wnd_mpc:
+      return
     user32.SendMessageW(HWND(self.wnd_mpc_volume), UINT(0x422), WPARAM(0), volume)
 
   def send_rotate(self, rotation):
+    if not self.wnd_mpc:
+      return
     if rotation == 90:
       self.send_key(882)
     elif rotation == 270:
@@ -615,14 +637,14 @@ class IPCmpcControler(threading.Thread):
           self.send_command(0xA0003004, '')
         if self.mute_changed or not iter:
           t = self.get_mute()
-          if t != self.Player_mute:
+          if t and t != self.Player_mute:
             self.mute_changed = False
             self.Player_mute = t
             self.Player_events.append(('Mute', self.Player_mute))
             self.Player_event_event.set()
             self.logger.log('Lecteur - événement enregistré: %s = "%s"' % ('Mute', self.Player_mute), 2)
           t = self.get_volume()
-          if t != self.Player_volume:
+          if t and t != self.Player_volume:
              self.Player_volume = t
              self.Player_events.append(('Volume', self.Player_volume))
              self.Player_event_event.set()
@@ -850,7 +872,7 @@ class DLNARequestHandler(socketserver.StreamRequestHandler):
           self.server.logger.log('Réponse à la requête %s /ICON.PNG' % req.method, 1)
         except:
           self.server.logger.log('Échec de la réponse à la requête %s /ICON.PNG' % req.method, 1)
-      elif self.Renderer.rot_image and req.path.lower() == '/rotated.jpg':
+      elif self.Renderer.rot_image and req.path[:8].lower() == '/rotated':
         try:
           if req.method == 'GET':
             self.request.sendall(resp.replace('##type##', 'image/jpeg').replace('##len##', str(len(self.Renderer.rot_image))).encode('ISO-8859-1') + (self.Renderer.rot_image))
@@ -2824,6 +2846,7 @@ class DLNARenderer:
         try:
           if r'://' in uri:
             f = _open_url(uri, method='GET')
+            
           else:
             f = open(uri, 'rb')
           image = f.read()
@@ -2852,7 +2875,7 @@ class DLNARenderer:
         self.events_add('AVTransport', (('CurrentMediaDuration', "0:00:00"), ('CurrentTrackDuration', "0:00:00")))
         self.IPCmpcControlerInstance.Player_event_event.set()
       else:
-        self.send_command((0xA0000000, self.AVTransportURI if not self.rot_image else 'http://%s:%s/rotated.jpg' % (self.ip, self.port)))
+        self.send_command((0xA0000000, self.AVTransportURI if not self.rot_image else 'http://%s:%s/rotated-%s' % (self.ip, self.port, self.AVTransportURI.rsplit('/' if r'://' in self.AVTransportURI else '\\', 1)[-1])))
         if '<upnp:class>object.item.imageItem'.lower() in self.AVTransportURIMetaData.replace(' ','').lower():
           self.IPCmpcControlerInstance.Player_image = True
         else:
@@ -2867,7 +2890,7 @@ class DLNARenderer:
       if self.TransportState == "NO_MEDIA_PRESENT":
         return '701', None
       if self.IPCmpcControlerInstance.Player_status.upper() in ("STOPPED", "NO_MEDIA_PRESENT"):
-        self.send_command((0xA0000000, self.AVTransportURI if not self.rot_image else 'http://%s:%s/rotated.jpg' % (self.ip, self.port)))
+        self.send_command((0xA0000000, self.AVTransportURI if not self.rot_image else 'http://%s:%s/rotated-%s' % (self.ip, self.port, self.AVTransportURI.rsplit('/' if r'://' in self.AVTransportURI else '\\', 1)[-1])))
         if '<upnp:class>object.item.imageItem'.lower() in self.AVTransportURIMetaData.replace(' ','').lower():
           self.IPCmpcControlerInstance.Player_image = True
         else:
@@ -2975,7 +2998,7 @@ class DLNARenderer:
   def start(self):
     self.IPCmpcControlerInstance.start()
     self.IPCmpcControlerInstance.Player_event_event.wait()
-    if not self.IPCmpcControlerInstance.wnd_ctrl:
+    if not self.IPCmpcControlerInstance.wnd_mpc:
       self.mpc_shutdown_event.set()
       return
     if self.Minimize:
@@ -2989,12 +3012,13 @@ class DLNARenderer:
   def stop(self):
     if not self.IPCmpcControlerInstance.wnd_ctrl:
       return
-    self.send_command((0xA0000002,''))
-    self.send_advertisement(False)
-    self.send_advertisement(False)
-    self.stop_search_management()
-    self.stop_request_management()
-    self.stop_events_management()
+    if self.IPCmpcControlerInstance.wnd_mpc:
+      self.send_command((0xA0000002,''))
+      self.send_advertisement(False)
+      self.send_advertisement(False)
+      self.stop_search_management()
+      self.stop_request_management()
+      self.stop_events_management()
     self.IPCmpcControlerInstance.stop()
 
 
