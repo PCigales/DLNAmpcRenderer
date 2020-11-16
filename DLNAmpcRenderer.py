@@ -353,7 +353,7 @@ class IPCmpcControler(threading.Thread):
         if Msg == 0x4A:
           copydata = ctypes.cast(lParam, LPCOPYDATA).contents
           not_code = copydata.dwData
-          not_msg = ctypes.string_at(copydata.lpData, copydata.cbData).decode('utf-16-le')[:-1]
+          not_msg = ctypes.wstring_at(copydata.lpData, copydata.cbData // 2)[:-1]
           self.Msg_buffer.append((not_code, not_msg))
           self.logger.log('Lecteur - notification reçue - code:%s - message:%s' % (hex(not_code), not_msg), 2)
           if not_code == 0x50000000:
@@ -535,10 +535,10 @@ class IPCmpcControler(threading.Thread):
   def send_command(self, cmd_code, cmd_msg):
     if not self.wnd_mpc:
       return
-    buf = ctypes.create_string_buffer(cmd_msg.encode('utf-16-le') + b'\x00')
+    buf = ctypes.create_unicode_buffer(cmd_msg)
     copydata = COPYDATA_STRUCT()
     copydata.dwData = ULONG_PTR(cmd_code)
-    copydata.cbData = DWORD(buf._length_)
+    copydata.cbData = DWORD(ctypes.sizeof(buf))
     copydata.lpData = ctypes.cast(buf, PVOID)
     user32.SendMessageW(HWND(self.wnd_mpc), UINT(0x4a), HWND(self.wnd_ctrl), copydata)
     self.logger.log('Lecteur - commande envoyée - code:%s - message:%s' % (hex(cmd_code), cmd_msg), 2)
@@ -583,7 +583,7 @@ class IPCmpcControler(threading.Thread):
     if not wnd_open:
       return None
     wnd_edit = user32.FindWindowExW(HWND(user32.FindWindowExW(HWND(user32.FindWindowExW(HWND(wnd_open), HWND(0), LPCWSTR('ComboBoxEx32'), LPCWSTR(0))), HWND(0), LPCWSTR('ComboBox'), LPCWSTR(0))), HWND(0), LPCWSTR('Edit'), LPCWSTR(0))
-    user32.SendMessageW(HWND(wnd_edit), UINT(0x0c), WPARAM(0), ctypes.create_string_buffer(uri.encode('utf-16-le')+b'\x00'))
+    user32.SendMessageW(HWND(wnd_edit), UINT(0x0c), WPARAM(0), LPCWSTR(uri))
     wnd_ok = 0
     for i in range(3):
       wnd_ok = user32.FindWindowExW(HWND(wnd_open), HWND(wnd_ok), LPCWSTR('Button'), LPCWSTR(0))
@@ -688,7 +688,7 @@ class IPCmpcControler(threading.Thread):
     wndClass.hCursor = 0
     wndClass.hBrush = 0
     wndClass.lpszMenuName = 0
-    wndClass.lpszClassName = wclassName
+    wndClass.lpszClassName = LPCWSTR(wclassName)
     wndClass.hIconSm = 0
     regRes = user32.RegisterClassExW(ctypes.byref(wndClass))
     self.wnd_ctrl = user32.CreateWindowExW(DWORD(0), LPCWSTR(wclassName), LPCWSTR(wname), DWORD(0x40000000),INT(0), INT(0), INT(0), INT(0), HWND(-3), HANDLE(0), HANDLE(0), hInst, LPVOID(0))
