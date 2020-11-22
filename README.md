@@ -7,7 +7,7 @@ To install the application:
 
   - of course, install Python 3
   - copy DLNAmpcRenderer.py, icon.png and mpc.bat in the same folder
-  - install mpc-hc (https://github.com/clsid2/mpc-hc/releases)
+  - install mpc-hc (https://github.com/clsid2/mpc-hc/releases) and madVR (http://madvr.com/) for proper image display and rotation
   - open mpc.bat and, if needed, change the path of mpc-hc executable
   - optionally, install jpegtran (https://jpegclub.org/jpegtran ), copy jpegtrans.bat, and change the path of jpegtran executable
   - allow mpc-hc and python to communicate through the firewall (for more precise needs, see below)
@@ -16,7 +16,7 @@ To run the application:
 
 DLNAmpcRenderer -h to display the complete syntax of command line and abbreviated commands
 
-DLNAmpcRenderer [-h] [--port RENDERER_TCP_PORT] [--name RENDERER_NAME] [--minimize] [--fullscreen] [--rotate_jpeg ROTATE_MODE] [--wmpdmc_no_mkv] [--trust_controler] [--search_subtitles] [--verbosity VERBOSE]
+DLNAmpcRenderer [-h] [--port RENDERER_TCP_PORT] [--name RENDERER_NAME] [--minimize] [--fullscreen] [--rotate_jpeg ROTATE_MODE] [--wmpdmc_no_mkv] [--trust_controler] [--search_subtitles] [--no_part_req_intermediate] [--verbosity VERBOSE]
 
 --port RENDERER_TCP_PORT: the port used by the renderer on the local machine sent to the controlers in the advertisements and the answers to the search requests  
 --name RENDERER_NAME: the name of the renderer, used to generate the uuid  
@@ -26,8 +26,11 @@ DLNAmpcRenderer [-h] [--port RENDERER_TCP_PORT] [--name RENDERER_NAME] [--minimi
 --wmpdmc_no_mkv: when set, Windows Media Player Digital Media Controller will transcode 'mkv' (matroska) files to 'mpegts' before streaming the content, allowing remote control of the playback, otherwise, the 'mkv' file will be streamed as it is, and the seekbar will probably be inactive in WMPDMC (but available in mpc-hc)  
 --trust_controler: when set, the URL of the content sent to the renderer is not checked before being passed to mpc-hc  
 --search_subtitles: when set, always requests subtitles, trying different extensions if no subtitle uri is provided by the controler or the server (may slow down the process)  
+--no_part_req_intermediate: when set, intermediates servers rejecting partial requests in order to allow mpc-hc to use Lav Splitter source (needs --trust_controler disabled)  
 --verbosity VERBOSE: for troubleshooting purposes, from 0 (default) to 2  
 
 Example: DLNAmpcRenderer -p 9100 -m -f -r j
 
 As for the settings of the firewall, mpc-hc needs outgoing TCP connections allowed, and python outgoing TCP and UDP connections, as well as incoming TCP connections from local network on local port RENDERER_TCP_PORT (as in command line), incoming UDP connections from local network on local port 1900.
+
+If with some files, in particular mpeg-ts contents, only audio is played, consider increasing the "stream analysis duration" of the "network settings" of Lav Splitter.
