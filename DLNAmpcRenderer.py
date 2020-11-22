@@ -15,6 +15,7 @@ import uuid
 import subprocess
 import html
 from io import BytesIO
+import shutil
 import argparse
 
 
@@ -891,12 +892,38 @@ class DLNARequestHandler(socketserver.StreamRequestHandler):
       elif self.Renderer.rot_image and req.path[:8].lower() == '/rotated':
         try:
           if req.method == 'GET':
-            self.request.sendall(resp.replace('##type##', 'image/jpeg').replace('##len##', str(len(self.Renderer.rot_image))).encode('ISO-8859-1') + (self.Renderer.rot_image))
+            self.request.sendall(resp.replace('##type##', 'image/jpeg').replace('##len##', str(len(self.Renderer.rot_image))).encode('ISO-8859-1') + self.Renderer.rot_image)
           else:
             self.request.sendall(resp.replace('##type##', 'image/jpeg').replace('##len##', str(len(self.Renderer.rot_image))).encode('ISO-8859-1'))
           self.server.logger.log('Réponse à la requête %s: %s' % (req.method, req.path), 1)
         except:
           self.server.logger.log('Échec de la réponse à la requête %s: %s' % (req.method, req.path), 1)
+      elif self.Renderer.proxy_uri and req.path[:6].lower() == '/proxy':
+        rep = None
+        try:
+          try:
+            rep = _open_url(self.Renderer.AVTransportURI, method=req.method)
+          except:
+            try:
+              self.request.sendall(resp_err.encode('ISO-8859-1'))
+            except:
+              pass
+            raise
+          resp_h = {11: 'HTTP/1.1', 10:'HTTP/1.0'}[rep.version] + ' ' + str(rep.status) + ' ' + rep.reason + '\r\n' + '\r\n'.join('%s: %s' % (k,v) for (k,v) in rep.getheaders()) + '\r\n\r\n'
+          self.request.settimeout(None)
+          self.request.sendall(resp_h.encode('ISO-8859-1'))
+          if req.method == 'GET':
+            self.server.logger.log('Début de la réponse à la requête %s: %s' % (req.method, req.path), 1)
+            shutil.copyfileobj(rep.fp, self.wfile, 256 * 1024)
+          self.server.logger.log('Réponse à la requête %s: %s' % (req.method, req.path), 1)
+        except:
+          self.server.logger.log('Échec de la réponse à la requête %s: %s' % (req.method, req.path), 1)
+        finally:
+          if rep:
+            try:
+              rep.close()
+            except:
+              pass
       else:
         try:
           self.request.sendall(resp_err.encode('ISO-8859-1'))
@@ -2398,7 +2425,7 @@ class DLNARenderer:
   'rtsp-rtp-udp:*:video/x-ms-wmv:*,' \
   'rtsp-rtp-udp:*:audio/x-asf-pf:*'
 
-  def __init__(self, RendererPort=8000, Minimize=False, FullScreen=False, JpegRotate=False, WMPDMCHideMKV=False, TrustControler=False, SearchSubtitles=False, verbosity=0):
+  def __init__(self, RendererPort=8000, Minimize=False, FullScreen=False, JpegRotate=False, WMPDMCHideMKV=False, TrustControler=False, SearchSubtitles=False, NoPartReqIntermediate=False, verbosity=0):
     self.verbosity = verbosity
     self.logger = log_event(verbosity)
     self.ip = socket.gethostbyname(socket.getfqdn())
@@ -2409,6 +2436,7 @@ class DLNARenderer:
     self.WMPDMCHideMKV = WMPDMCHideMKV
     self.TrustControler = TrustControler
     self.SearchSubtitles = SearchSubtitles
+    self.NoPartReqIntermediate = NoPartReqIntermediate
     self.IPCmpcControlerInstance = IPCmpcControler(title_name=NAME + ':%s' % RendererPort, verbosity=verbosity)
     self.IPCmpcControlerInstance.Player_fullscreen = FullScreen
     self.is_search_manager_running = None
@@ -2492,6 +2520,7 @@ class DLNARenderer:
     self.RelativeTimePosition = "0:00:00"
     self.CurrentMediaDuration = "0:00:00"
     self.rot_image = b''
+    self.proxy_uri = ''
 
   def send_advertisement(self, alive):
     msg = 'NOTIFY * HTTP/1.1\r\n' \
@@ -2879,6 +2908,13 @@ class DLNARenderer:
       if 'object.item.imageItem'.lower() in upnp_class.lower() and self.JpegRotate == 'k':
         self.IPCmpcControlerInstance.Player_rotation = {'upper-left': 0, 'lower-right': 180, 'upper-right': 90, 'lower-left': 270}.get(_jpeg_exif_orientation(self.AVTransportURI), 0)
       self.AVTransportURIMetaData = '<DIDL-Lite xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" xmlns:dlna="urn:schemas-dlna-org:metadata-1-0/" xmlns:sec="http://www.sec.co.kr/"><item><dc:title>%s</dc:title><upnp:class>%s</upnp:class><res protocolInfo="%s">%s</res>%s</item></DIDL-Lite>' % (html.escape(title), upnp_class, html.escape(protocol_info), html.escape(uri), '<sec:CaptionInfoEx sec:type="%s">%s</sec:CaptionInfoEx>' %(html.escape(caption_type), html.escape(self.AVTransportSubURI)) if self.AVTransportSubURI else '')
+      if 'MDEServer'.lower() in self.AVTransportURI.lower():
+        if 'DLNA.ORG_CI' in self.AVTransportURIMetaData and not 'DLNA.ORG_CI=0' in self.AVTransportURIMetaData:
+          accept_range = False
+      if not self.NoPartReqIntermediate or accept_range:
+        self.proxy_uri = ''
+      else:
+        self.proxy_uri = 'http://%s:%s/proxy-%s' % (self.ip, self.port, self.AVTransportURI.rsplit('/' if r'://' in self.AVTransportURI else '\\', 1)[-1])    
       self.events_add('AVTransport', (('AVTransportURI', self.AVTransportURI), ('AVTransportURIMetaData', self.AVTransportURIMetaData), ('CurrentTrackMetaData', self.AVTransportURIMetaData), ('CurrentTrackURI', self.AVTransportURI)))
       if prev_transp_state == "TRANSITIONING":
         self.send_command((0xA0000002, ''))
@@ -2891,7 +2927,7 @@ class DLNARenderer:
         self.events_add('AVTransport', (('CurrentMediaDuration', "0:00:00"), ('CurrentTrackDuration', "0:00:00")))
         self.IPCmpcControlerInstance.Player_event_event.set()
       else:
-        self.send_command((0xA0000000, self.AVTransportURI if not self.rot_image else 'http://%s:%s/rotated-%s' % (self.ip, self.port, self.AVTransportURI.rsplit('/' if r'://' in self.AVTransportURI else '\\', 1)[-1])))
+        self.send_command((0xA0000000, (self.proxy_uri or self.AVTransportURI) if not self.rot_image else 'http://%s:%s/rotated-%s' % (self.ip, self.port, self.AVTransportURI.rsplit('/' if r'://' in self.AVTransportURI else '\\', 1)[-1])))
         if '<upnp:class>object.item.imageItem'.lower() in self.AVTransportURIMetaData.replace(' ','').lower():
           self.IPCmpcControlerInstance.Player_image = True
         else:
@@ -2906,7 +2942,7 @@ class DLNARenderer:
       if self.TransportState == "NO_MEDIA_PRESENT":
         return '701', None
       if self.IPCmpcControlerInstance.Player_status.upper() in ("STOPPED", "NO_MEDIA_PRESENT"):
-        self.send_command((0xA0000000, self.AVTransportURI if not self.rot_image else 'http://%s:%s/rotated-%s' % (self.ip, self.port, self.AVTransportURI.rsplit('/' if r'://' in self.AVTransportURI else '\\', 1)[-1])))
+        self.send_command((0xA0000000, (self.proxy_uri or self.AVTransportURI) if not self.rot_image else 'http://%s:%s/rotated-%s' % (self.ip, self.port, self.AVTransportURI.rsplit('/' if r'://' in self.AVTransportURI else '\\', 1)[-1])))
         if '<upnp:class>object.item.imageItem'.lower() in self.AVTransportURIMetaData.replace(' ','').lower():
           self.IPCmpcControlerInstance.Player_image = True
         else:
@@ -3050,6 +3086,7 @@ if __name__ == '__main__':
   parser.add_argument('--wmpdmc_no_mkv', '-w', help='masque la prise en charge du format matroska à WMPDMC pour permettre le contrôle distant [désactivé par défaut]', action='store_true')
   parser.add_argument('--trust_controler', '-t', help='désactive la vérification des adresses avant leur transmission à mpc [désactivé par défaut]', action='store_true')
   parser.add_argument('--search_subtitles', '-s', help='active la recherche systématique de sous-titres [désactivé par défaut]', action='store_true')
+  parser.add_argument('--no_part_req_intermediate', '-i', help='intermédie les serveurs rejetant les requêtes partielles [désactivé par défaut, nécessite hormis pour WMPDMC la vérification d\'adresse]', action='store_true')
   parser.add_argument('--verbosity', '-v', metavar='VERBOSE', help='niveau de verbosité de 0 à 2 [0 par défaut]', type=int, choices=[0, 1, 2], default=0)
 
   args = parser.parse_args()
@@ -3057,7 +3094,7 @@ if __name__ == '__main__':
     NAME = args.name
     UDN = 'uuid:' + str(uuid.uuid5(uuid.NAMESPACE_URL, args.name))
     DLNARenderer.Device_SCPD = DLNARenderer.Device_SCPD.replace('DLNAmpcRenderer', html.escape(NAME)).replace('uuid:' + str(uuid.uuid5(uuid.NAMESPACE_URL, 'DLNAmpcRenderer')), UDN)
-  Renderer = DLNARenderer(args.port, args.minimize, args.fullscreen, args.rotate_jpeg, args.wmpdmc_no_mkv, args.trust_controler, args.search_subtitles, args.verbosity)
+  Renderer = DLNARenderer(args.port, args.minimize, args.fullscreen, args.rotate_jpeg, args.wmpdmc_no_mkv, args.trust_controler, args.search_subtitles, args.no_part_req_intermediate, args.verbosity)
   print('Appuyez sur "S" ou fermez mpc pour stopper')
   print('Appuyez sur "M" pour activer/désactiver le passage en mode minimisé quand inactif - mode actuel: %s' % ('activé' if Renderer.Minimize else 'désactivé'))
   print('Appuyez sur "F" pour activer/désactiver le passage en mode plein écran à chaque session - mode actuel: %s' % ('activé' if Renderer.FullScreen else 'désactivé'))
