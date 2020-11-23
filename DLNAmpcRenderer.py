@@ -35,17 +35,20 @@ class log_event:
       print(s_now, ':', msg)
 
 
-def _open_url(url, method=None, timeout=None, test_range=False):
+def _open_url(url, method=None, timeout=None, test_reject_range=False):
   header = {'User-Agent': 'Lavf'}
-  if method and test_range:
-    if method.upper() == 'HEAD':
-      header['Range'] = 'bytes=0-'
+  if test_reject_range and (method or '').upper() != 'HEAD':
+    return None, None
+  if test_reject_range:
+    header['Range'] = 'bytes=0-'
+    reject_range = False
   req = urllib.request.Request(url, headers=header, method=method)
   rep = None
   try:
     rep = urllib.request.urlopen(req, data=None, timeout=timeout)
   except urllib.error.HTTPError as e:
-    if e.code == 406 and test_range and (method or '').upper() == 'HEAD':
+    if e.code == 406 and test_reject_range:
+      reject_range = True
       del header['Range']
       req = urllib.request.Request(url, headers=header, method=method)
       rep = None
@@ -55,7 +58,10 @@ def _open_url(url, method=None, timeout=None, test_range=False):
         pass
   except:
     pass
-  return rep
+  if test_reject_range:
+    return rep, (reject_range if rep != None else None)
+  else:
+    return rep
 
 def _XMLGetNodeText(node):
   text = []
@@ -914,7 +920,7 @@ class DLNARequestHandler(socketserver.StreamRequestHandler):
           self.request.sendall(resp_h.encode('ISO-8859-1'))
           if req.method == 'GET':
             self.server.logger.log('Début de la réponse à la requête %s: %s' % (req.method, req.path), 1)
-            shutil.copyfileobj(rep.fp, self.wfile, 256 * 1024)
+            shutil.copyfileobj(rep, self.wfile, 256 * 1024)
           self.server.logger.log('Réponse à la requête %s: %s' % (req.method, req.path), 1)
         except:
           self.server.logger.log('Échec de la réponse à la requête %s: %s' % (req.method, req.path), 1)
@@ -2836,19 +2842,14 @@ class DLNARenderer:
         protocol_info = s_protocol_info
       rep = None
       server = ''
-      accept_range = True
+      reject_range = False
       if uri:
         if self.TrustControler:
           rep = True
         elif r'://' in uri:
-          rep = _open_url(uri, method='HEAD', test_range=True)
+          rep, reject_range = _open_url(uri, method='HEAD', test_reject_range=True)
           if rep:
             server = rep.getheader('Server', '')
-            if rep.getheader('Accept-Ranges'):
-              if rep.getheader('Accept-Ranges').lower() == 'none':
-                accept_range = False
-            elif rep.status != 206:
-              accept_range = False
         else:
           rep = os.path.isfile(uri)
       if not rep:
@@ -2910,8 +2911,8 @@ class DLNARenderer:
       self.AVTransportURIMetaData = '<DIDL-Lite xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" xmlns:dlna="urn:schemas-dlna-org:metadata-1-0/" xmlns:sec="http://www.sec.co.kr/"><item><dc:title>%s</dc:title><upnp:class>%s</upnp:class><res protocolInfo="%s">%s</res>%s</item></DIDL-Lite>' % (html.escape(title), upnp_class, html.escape(protocol_info), html.escape(uri), '<sec:CaptionInfoEx sec:type="%s">%s</sec:CaptionInfoEx>' %(html.escape(caption_type), html.escape(self.AVTransportSubURI)) if self.AVTransportSubURI else '')
       if 'MDEServer'.lower() in self.AVTransportURI.lower():
         if 'DLNA.ORG_CI' in self.AVTransportURIMetaData and not 'DLNA.ORG_CI=0' in self.AVTransportURIMetaData:
-          accept_range = False
-      if not self.NoPartReqIntermediate or accept_range:
+          reject_range = True
+      if not self.NoPartReqIntermediate or not reject_range:
         self.proxy_uri = ''
       else:
         self.proxy_uri = 'http://%s:%s/proxy-%s' % (self.ip, self.port, self.AVTransportURI.rsplit('/' if r'://' in self.AVTransportURI else '\\', 1)[-1])    
