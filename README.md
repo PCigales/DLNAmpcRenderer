@@ -1,5 +1,5 @@
 # DLNAmpcRenderer
-A script in Python 3 to turn mpc-hc into a DLNA/UPnP renderer 
+A script in Python 3 to turn mpc-hc into a DLNA / UPnP renderer 
 
 DLNAmpcRenderer is an application written in Python 3 designed as a wrapper for mpc-hc to use the player as a DLNA/UPnP renderer, on a computer running under Windows. The script does not need any other package, only the presence of an executable of mpc-hc is required. The application has been tested with a few DLNA controlers (Windows Media Player Digital Media Controller, Bubble UPnP, UPnPlay, DLNAPlayOn) but should work with any DLNA compliant controler. Subtitles management is enabled through the DIDL description ('subtitlefileuri' or 'captioninfo'/'captioninfoex' tags) or the use of a 'captioninfo.sec' header in the response to the HEAD/GET request for the content to be played. Several instances can run in parallel provided they use different ports and names.
 
