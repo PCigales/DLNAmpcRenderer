@@ -2453,6 +2453,7 @@ class DLNARenderer:
             self.ip = socket.gethostbyname(socket.getfqdn())
           except:
             self.ip = ''
+            self.logger.log('Échec de la récupération de l\'addresse ip de l\'hôte', 0)
     self.port = RendererPort
     self.Minimize = Minimize
     self.FullScreen = FullScreen
@@ -3072,6 +3073,7 @@ class DLNARenderer:
 
   def start(self):
     if not self.ip:
+      self.mpc_shutdown_event.set()
       return
     self.IPCmpcControlerInstance.start()
     self.IPCmpcControlerInstance.Player_event_event.wait()
