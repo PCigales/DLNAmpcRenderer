@@ -16,8 +16,9 @@ To run the application:
 
 DLNAmpcRenderer -h to display the complete syntax of command line and abbreviated commands
 
-DLNAmpcRenderer [-h] [--port RENDERER_TCP_PORT] [--name RENDERER_NAME] [--minimize] [--fullscreen] [--rotate_jpeg ROTATE_MODE] [--wmpdmc_no_mkv] [--trust_controler] [--search_subtitles] [--no_part_req_intermediate] [--verbosity VERBOSE]
+DLNAmpcRenderer [-h] [--bind RENDERER_TCP_IP] [--port RENDERER_TCP_PORT] [--name RENDERER_NAME] [--minimize] [--fullscreen] [--rotate_jpeg ROTATE_MODE] [--wmpdmc_no_mkv] [--trust_controler] [--search_subtitles] [--no_part_req_intermediate] [--verbosity VERBOSE]
 
+--bind RENDERER_TCP_IP: the ip address used by the renderer on the local machine sent to the controlers in the advertisements and the answers to the search requests (to set it manually if the script does not manage to self-determine the ip address of the host or to select a specific network interface)  
 --port RENDERER_TCP_PORT: the port used by the renderer on the local machine sent to the controlers in the advertisements and the answers to the search requests  
 --name RENDERER_NAME: the name of the renderer, used to generate the uuid  
 --minimize: when set, minimizes the window of mpc-hc when inactive and restore it to its previous size when a playback is launched (useful when displaying photos as some controlers stop the playback between two consecutive pictures or when playing music as there is no use showing the window)  
