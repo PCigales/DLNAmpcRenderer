@@ -1,3 +1,7 @@
+# DLNAmpcRenderer v1.2.4 (https://github.com/PCigales/DLNAmpcRenderer)
+# Copyright © 2022 PCigales
+# This program is licensed under the GNU GPLv3 copyleft license (see https://www.gnu.org/licenses)
+
 import threading
 import msvcrt
 import ctypes, ctypes.wintypes
@@ -3107,6 +3111,10 @@ class DLNARenderer:
 
 
 if __name__ == '__main__':
+
+  print('DLNAmpcRenderer v1.2.4 (https://github.com/PCigales/DLNAmpcRenderer)    Copyright © 2022 PCigales')
+  print('This program is licensed under the GNU GPLv3 copyleft license (see https://www.gnu.org/licenses)\r\nCe programme est sous licence copyleft GNU GPLv3 (voir https://www.gnu.org/licenses)')
+  print('')
 
   formatter = lambda prog: argparse.HelpFormatter(prog, max_help_position=50, width=119)
   CustomArgumentParser = partial(argparse.ArgumentParser, formatter_class=formatter)
