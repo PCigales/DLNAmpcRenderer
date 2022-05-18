@@ -763,11 +763,12 @@ class DLNASearchServer(socketserver.UDPServer):
   
   def __init__(self, *args, verbosity, **kwargs):
     self.logger = log_event(verbosity)
+    self.ipf = bool(args[0][0])
     super().__init__(*args, **kwargs)
 
   def server_bind(self):
     super().server_bind()
-    self.socket.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, struct.pack('4sL', socket.inet_aton('239.255.255.250'), socket.INADDR_ANY))
+    self.socket.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, struct.pack('4s4s', socket.inet_aton('239.255.255.250'), (socket.inet_aton(self.server_address[0] if self.ipf else '0.0.0.0'))))
 
 
 class DLNASearchHandler(socketserver.DatagramRequestHandler):
@@ -2438,8 +2439,10 @@ class DLNARenderer:
     self.verbosity = verbosity
     self.logger = log_event(verbosity)
     if RendererIp:
+      self.ipf = True
       self.ip = RendererIp
     else:
+      self.ipf = False
       try:
         s = socket.socket(type=socket.SOCK_DGRAM)
         s.connect(('239.255.255.250', 1900))
@@ -2559,6 +2562,9 @@ class DLNARenderer:
     '\r\n'
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
     sock.settimeout(3)
+    if self.ipf:
+      sock.bind((self.ip, 0))
+      print(sock)
     try:
       sock.sendto(msg.replace('##NT##', '::upnp:rootdevice').encode('ISO-8859-1'), ('239.255.255.250', 1900))
       sock.sendto(msg.replace('##NT##', '').encode('ISO-8859-1'), ('239.255.255.250', 1900))
@@ -2573,7 +2579,7 @@ class DLNARenderer:
 
   def _start_search_manager(self):
     DLNASearchBoundHandler = partial(DLNASearchHandler, renderer=self)
-    with DLNASearchServer(('', 1900), DLNASearchBoundHandler, verbosity=self.verbosity) as self.DLNASearchManager:
+    with DLNASearchServer((('' if not self.ipf else self.ip), 1900), DLNASearchBoundHandler, verbosity=self.verbosity) as self.DLNASearchManager:
       self.DLNASearchManager.serve_forever()
     self.is_search_manager_running = None
 
@@ -3106,7 +3112,7 @@ if __name__ == '__main__':
   formatter = lambda prog: argparse.HelpFormatter(prog, max_help_position=50, width=119)
   CustomArgumentParser = partial(argparse.ArgumentParser, formatter_class=formatter)
   parser = CustomArgumentParser()
-  parser.add_argument('--bind', '-b', metavar='RENDERER_TCP_IP', help='adresse IP du renderer [auto-sélectionnée par défaut]', default='')
+  parser.add_argument('--bind', '-b', metavar='RENDERER_IP', help='adresse IP du renderer [auto-sélectionnée par défaut]', default='')
   parser.add_argument('--port', '-p', metavar='RENDERER_TCP_PORT', help='port TCP du renderer [8000 par défaut]', type=int, default=8000)
   parser.add_argument('--name', '-n', metavar='RENDERER_NAME', help='nom du renderer [DLNAmpcRenderer par défaut]', default='DLNAmpcRenderer')
   parser.add_argument('--minimize', '-m', help='passage en mode minimisé quand inactif [désactivé par défaut]', action='store_true')
