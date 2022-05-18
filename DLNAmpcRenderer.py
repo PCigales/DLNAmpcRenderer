@@ -2564,7 +2564,6 @@ class DLNARenderer:
     sock.settimeout(3)
     if self.ipf:
       sock.bind((self.ip, 0))
-      print(sock)
     try:
       sock.sendto(msg.replace('##NT##', '::upnp:rootdevice').encode('ISO-8859-1'), ('239.255.255.250', 1900))
       sock.sendto(msg.replace('##NT##', '').encode('ISO-8859-1'), ('239.255.255.250', 1900))
