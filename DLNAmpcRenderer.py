@@ -6,7 +6,6 @@ import threading
 import msvcrt
 import ctypes, ctypes.wintypes
 import os
-import contextlib
 from functools import partial
 import socket
 import socketserver
@@ -23,7 +22,7 @@ import shutil
 import argparse
 
 
-NAME = 'DLNAmpcRenderer'                        
+NAME = 'DLNAmpcRenderer'
 UDN = 'uuid:' + str(uuid.uuid5(uuid.NAMESPACE_URL, 'DLNAmpcRenderer'))
 
 
@@ -537,7 +536,7 @@ class IPCmpcControler(threading.Thread):
       self.logger.log('Lecteur: fermeture', 1)
       if self.Player_status != "STOPPED":
         self.Player_status = "STOPPED"
-        self.logger.log('Lecteur - événement enregistré: %s = "%s"' % ('TransportState', "STOPPED"), 1)    
+        self.logger.log('Lecteur - événement enregistré: %s = "%s"' % ('TransportState', "STOPPED"), 1)
         self.Player_events.append(('TransportState', "STOPPED"))
     else:
       self.logger.log('Lecteur - échec du lancement', 0)
@@ -764,7 +763,7 @@ class DLNAService:
 class DLNASearchServer(socketserver.UDPServer):
 
   allow_reuse_address = True
-  
+
   def __init__(self, *args, verbosity, **kwargs):
     self.logger = log_event(verbosity)
     self.ipf = bool(args[0][0])
@@ -783,7 +782,7 @@ class DLNASearchHandler(socketserver.DatagramRequestHandler):
       super().__init__(*args, **kwargs)
     except:
       pass
-  
+
   def handle(self):
     req = HTTPMessage(self.request)
     if req.method != 'M-SEARCH':
@@ -817,13 +816,15 @@ class DLNARequestServer(socketserver.ThreadingTCPServer):
   def __init__(self, *args, verbosity, **kwargs):
     self.logger = log_event(verbosity)
     super().__init__(*args, **kwargs)
-  
+
   def server_bind(self):
     self.conn_sockets = []
-    with contextlib.suppress(Exception):
+    try:
       self.socket.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 0)
+    except:
+      pass
     super().server_bind()
-    
+
   def process_request_thread(self, request, client_address):
     self.conn_sockets.append(request)
     self.logger.log('Connexion de %s:%s' % client_address, 2)
@@ -845,7 +846,7 @@ class DLNARequestHandler(socketserver.StreamRequestHandler):
       super().__init__(*args, **kwargs)
     except:
       pass
-  
+
   def handle(self):
     if not self.Renderer.is_request_manager_running:
       return
@@ -884,7 +885,7 @@ class DLNARequestHandler(socketserver.StreamRequestHandler):
       self.server.logger.log('Réception de la requête %s %s' % (req.method, req.path), 2)
       dict_scpd = {'/D_S': 'Device_SCPD', '/RC_S': 'RenderingControl_SCPD', '/CM_S': 'ConnectionManager_SCPD', '/AVT_S': 'AVTransport_SCPD'}
       if req.path.upper() in dict_scpd:
-        resp_body = eval('DLNARenderer.' + dict_scpd[req.path]).encode('UTF-8')
+        resp_body = getattr(DLNARenderer, dict_scpd[req.path]).encode('utf-8')
         try:
           if req.method == 'GET':
             self.request.sendall(resp.replace('##type##', 'text/xml; charset="utf-8"').replace('##len##', str(len(resp_body))).encode('ISO-8859-1') + resp_body)
@@ -1205,7 +1206,7 @@ class DLNARequestHandler(socketserver.StreamRequestHandler):
             except:
               self.server.logger.log('Échec de la réponse à la requête POST %s-%s' % (serv, act), 1)
           elif res in ('401', '402', '701', '716'):
-            resp_body = eval('resp_err_ise' + res + '_body').encode('UTF-8')
+            resp_body = locals()['resp_err_ise%s_body' % res].encode('UTF-8')
             try:
               self.request.sendall(resp_err_ise.replace('##len##', str(len(resp_body))).encode('ISO-8859-1') + resp_body)
             except:
@@ -1353,7 +1354,7 @@ class DLNARenderer:
   <deviceType>urn:schemas-upnp-org:device:MediaRenderer:1</deviceType>
   <pnpx:X_compatibleId>MS_DigitalMediaDeviceClass_DMR_V001</pnpx:X_compatibleId>
   <pnpx:X_deviceCategory>MediaDevices</pnpx:X_deviceCategory>
-  <df:X_deviceCategory>Multimedia.DMR</df:X_deviceCategory>  
+  <df:X_deviceCategory>Multimedia.DMR</df:X_deviceCategory>
   <dlna:X_DLNADOC xmlns:dlna=\'urn:schemas-dlna-org:device-1-0\'>DMR-1.50</dlna:X_DLNADOC>
   <friendlyName>''' + html.escape(NAME) + '''</friendlyName>
   <manufacturer>PCigales</manufacturer>
@@ -1408,7 +1409,7 @@ class DLNARenderer:
     <minor>0</minor>
   </specVersion>
   <actionList>
-    <action>  
+    <action>
       <name>GetMute</name>
       <argumentList>
         <argument>
@@ -1428,7 +1429,7 @@ class DLNARenderer:
         </argument>
       </argumentList>
     </action>
-    <action> 
+    <action>
       <name>SetMute</name>
       <argumentList>
         <argument>
@@ -1448,7 +1449,7 @@ class DLNARenderer:
         </argument>
       </argumentList>
     </action>
-    <action> 
+    <action>
       <name>GetVolume</name>
       <argumentList>
         <argument>
@@ -1468,7 +1469,7 @@ class DLNARenderer:
         </argument>
       </argumentList>
     </action>
-    <action> 
+    <action>
       <name>SetVolume</name>
       <argumentList>
         <argument>
@@ -1490,16 +1491,16 @@ class DLNARenderer:
     </action>
   </actionList>
   <serviceStateTable>
-    <stateVariable sendEvents="yes"> 
-      <name>LastChange</name> 
+    <stateVariable sendEvents="yes">
+      <name>LastChange</name>
       <dataType>string</dataType>
     </stateVariable>
-    <stateVariable sendEvents="no"> 
-      <name>Mute</name>  
+    <stateVariable sendEvents="no">
+      <name>Mute</name>
       <dataType>boolean</dataType>
     </stateVariable>
-    <stateVariable sendEvents="no"> 
-      <name>Volume</name>  
+    <stateVariable sendEvents="no">
+      <name>Volume</name>
       <dataType>ui2</dataType>
       <allowedValueRange>
         <minimum>0</minimum>
@@ -1507,15 +1508,15 @@ class DLNARenderer:
         <step>1</step>
       </allowedValueRange>
     </stateVariable>
-    <stateVariable sendEvents="no"> 
-      <name>A_ARG_TYPE_Channel</name>  
+    <stateVariable sendEvents="no">
+      <name>A_ARG_TYPE_Channel</name>
       <dataType>string</dataType>
       <allowedValueList>
         <allowedValue>Master</allowedValue>
       </allowedValueList>
     </stateVariable>
-    <stateVariable sendEvents="no"> 
-      <name>A_ARG_TYPE_InstanceID</name>  
+    <stateVariable sendEvents="no">
+      <name>A_ARG_TYPE_InstanceID</name>
       <dataType>ui4</dataType>
     </stateVariable>
   </serviceStateTable>
@@ -2432,6 +2433,10 @@ class DLNARenderer:
   'http-get:*:video/x-ms-wm:*,' \
   'http-get:*:video/x-ms-wmx:*,' \
   'http-get:*:video/x-ms-wvx:*,' \
+  'http-get:*:audio/x-wavpack:*,' \
+  'http-get:*:video/mp2t:*,' \
+  'http-get:*:audio/x-ogg:*,' \
+  'http-get:*:audio/ac3:*,' \
   'rtsp-rtp-udp:*:audio/L16:*,' \
   'rtsp-rtp-udp:*:audio/L8:*,' \
   'rtsp-rtp-udp:*:audio/mpeg:*,' \
@@ -2504,7 +2509,7 @@ class DLNARenderer:
       service.ControlURL = urllib.parse.urljoin(self.BaseURL, _XMLGetNodeText(node.getElementsByTagName('controlURL')[0]))
       service.SubscrEventURL = urllib.parse.urljoin(self.BaseURL, _XMLGetNodeText(node.getElementsByTagName('eventSubURL')[0]))
       service.DescURL = urllib.parse.urljoin(self.BaseURL, _XMLGetNodeText(node.getElementsByTagName('SCPDURL')[0]))
-      root_s_xml = minidom.parseString(eval('DLNARenderer.%s_SCPD' % service.Id[23:]))
+      root_s_xml = minidom.parseString(getattr(DLNARenderer, '%s_SCPD' % service.Id[23:]))
       for node_s in root_s_xml.getElementsByTagName('action'):
         action = DLNAAction()
         action.Name = _XMLGetNodeText(node_s.getElementsByTagName('name')[0])
@@ -2602,7 +2607,7 @@ class DLNARenderer:
       self.logger.log('Démarrage de l\'écoute des messages de recherche de renderer', 1)
       manager_thread = threading.Thread(target=self._start_search_manager)
       manager_thread.start()
-  
+
   def stop_search_management(self):
     if self.is_search_manager_running:
       self.logger.log('Fin de l\'écoute des messages de recherche de renderer', 1)
@@ -2888,7 +2893,6 @@ class DLNARenderer:
       if not rep:
         self.events_add('AVTransport', (('TransportStatus', "ERROR_OCCURRED"),))
         self.events_add('AVTransport', (('TransportStatus', "OK"),))
-        self.ActionsProcessed += 1
         self.TransportState = prev_transp_state
         self.IPCmpcControlerInstance.Player_events.append(('TransportState', prev_transp_state))
         self.IPCmpcControlerInstance.Player_event_event.set()
