@@ -2571,9 +2571,9 @@ class DLNARenderer:
     '\r\n'
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
     sock.settimeout(3)
-    if self.ipf:
-      sock.bind((self.ip, 0))
     try:
+      if self.ipf:
+        sock.bind((self.ip, 0))
       sock.sendto(msg.replace('##NT##', '::upnp:rootdevice').encode('ISO-8859-1'), ('239.255.255.250', 1900))
       sock.sendto(msg.replace('##NT##', '').encode('ISO-8859-1'), ('239.255.255.250', 1900))
       sock.sendto(msg.replace('##NT##', '::urn:schemas-upnp-org:device:MediaRenderer:1').encode('ISO-8859-1'), ('239.255.255.250', 1900))
@@ -2587,8 +2587,11 @@ class DLNARenderer:
 
   def _start_search_manager(self):
     DLNASearchBoundHandler = partial(DLNASearchHandler, renderer=self)
-    with DLNASearchServer((('' if not self.ipf else self.ip), 1900), DLNASearchBoundHandler, verbosity=self.verbosity) as self.DLNASearchManager:
-      self.DLNASearchManager.serve_forever()
+    try:
+      with DLNASearchServer((('' if not self.ipf else self.ip), 1900), DLNASearchBoundHandler, verbosity=self.verbosity) as self.DLNASearchManager:
+        self.DLNASearchManager.serve_forever()
+    except:
+      self.logger.log('Échec du démarrage de l\'écoute des messages de recherche de renderer', 1)
     self.is_search_manager_running = None
 
   def _shutdown_search_manager(self):
