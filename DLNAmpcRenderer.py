@@ -3282,7 +3282,7 @@ class DLNARenderer:
     elif acti.lower() == 'Play'.lower():
       if self.TransportState == "NO_MEDIA_PRESENT":
         return '701', None
-      if self.IPCmpcControlerInstance.Player_status.upper() in ("STOPPED", "NO_MEDIA_PRESENT") and self.IPCmpcControlerInstance.Player_image:
+      if self.IPCmpcControlerInstance.Player_status.upper() == "STOPPED" and self.IPCmpcControlerInstance.Player_image:
         time.sleep(0.1)
       if self.IPCmpcControlerInstance.Player_status.upper() in ("STOPPED", "NO_MEDIA_PRESENT"):
         self.send_command((0xA0000000, (self.proxy_uri or self.AVTransportURI) if not self.rot_image else 'http://%s:%s/rotated-%s' % (self.mpc_ip, self.Port, self.AVTransportURI.rsplit('/' if r'://' in self.AVTransportURI else '\\', 1)[-1])))
