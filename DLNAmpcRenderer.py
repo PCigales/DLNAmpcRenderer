@@ -1,4 +1,4 @@
-# DLNAmpcRenderer v1.3.0 (https://github.com/PCigales/DLNAmpcRenderer)
+# DLNAmpcRenderer v1.3.1 (https://github.com/PCigales/DLNAmpcRenderer)
 # Copyright © 2022 PCigales
 # This program is licensed under the GNU GPLv3 copyleft license (see https://www.gnu.org/licenses)
 
@@ -90,6 +90,7 @@ EN_STRINGS = {
   'image': 'image'
 }
 
+locale.setlocale(locale.LC_TIME, '')
 LSTRINGS = EN_STRINGS
 try:
   if locale.getlocale()[0][:2].lower() == 'fr':
@@ -105,9 +106,7 @@ class log_event:
 
   def log(self, msg, level):
     if level <= self.verbosity:
-      now = time.localtime()
-      s_now = '%02d/%02d/%04d %02d:%02d:%02d' % (now.tm_mday, now.tm_mon, now.tm_year, now.tm_hour, now.tm_min, now.tm_sec)
-      print(s_now, ':', msg)
+      print(time.strftime('%x %X', time.localtime()), ':', msg)
 
 
 def _open_url(url, method=None, timeout=None, test_reject_range=False):
@@ -158,47 +157,40 @@ def _jpeg_exif_orientation(image):
     else:
       return
     if f.read(2) != b'\xff\xd8':
-      f.close()
-      return
-    t = f.read(2)
-    if t == b'\xff\xe0':
-      len = struct.unpack('!H', f.read(2))[0]
-      f.read(len - 2)
+      raise
+    t = b''
+    l = 2
+    while t != b'\xff\xe1':
+      f.seek(l - 2, os.SEEK_CUR)
       t = f.read(2)
-    if t != b'\xff\xe1':
-      f.close()
-      return None
-    len = struct.unpack('!H', f.read(2))[0]
+      if t[:1] != b'\xff' or t == b'\xff\xda':
+        raise
+      l = struct.unpack('!H', f.read(2))[0]
     if f.read(6) != b'Exif\x00\x00':
-      f.close()
-      return None
+      raise
     ba = {b'MM': '>', b'II': '<'}.get(f.read(2),'')
     if ba == '':
-      f.close()
-      return None
+      raise
     if f.read(2) != (b'\x00\x2a' if ba == '>' else b'\x2a\x00') :
-      f.close()
-      return None
-    f.read(struct.unpack(ba + 'I', f.read(4))[0] - 8)
+      raise
+    f.seek(struct.unpack(ba + 'I', f.read(4))[0] - 8, os.SEEK_CUR)
     ne = struct.unpack(ba + 'H', f.read(2))[0]
     for i in range(ne):
       e = f.read(12)
       if struct.unpack(ba + 'H', e[0:2])[0] == 0x0112:
-        nb = {1: 1, 3: 2, 4:4}.get(struct.unpack(ba + 'H', e[2:4])[0],0)
+        nb = {1: 1, 3: 2, 4: 4}.get(struct.unpack(ba + 'H', e[2:4])[0], 0)
         if nb == 0 or struct.unpack(ba + 'I', e[4:8])[0] != 1:
-          f.close()
-          return None
-        f.close()
+          raise
         return {1: 'upper-left', 3: 'lower-right', 6: 'upper-right', 8: 'lower-left'}.get(struct.unpack(ba + {1: 'B', 2: 'H', 4: 'I'}[nb], e[8:8+nb])[0], None)
-    f.close()
     return None
   except:
+    return None
+  finally:
     if f:
       try:
         f.close()
       except:
         pass
-    return None
 
 
 class HTTPExplodedMessage():
@@ -291,6 +283,8 @@ class HTTPMessage():
       msg = b''
     while True:
       msg = msg.lstrip(b'\r\n')
+      if msg and msg[0] < 0x20:
+        return http_message
       body_pos = msg.find(b'\r\n\r\n')
       if body_pos >= 0:
         body_pos += 4
@@ -494,9 +488,12 @@ class HTTPRequest():
       try:
         if pconnection[0] is None:
           if url_p.scheme.lower() == 'http':
-            pconnection[0] = socket.create_connection((url_p.netloc + ':80').split(':', 2)[:2], timeout=timeout, source_address=(ip, 0))
+            pconnection[0] = socket.create_connection((url_p.hostname, url_p.port if url_p.port is not None else 80), timeout=timeout, source_address=(ip, 0))
           elif url_p.scheme.lower() == 'https':
-            pconnection[0] = cls.SSLContext.wrap_socket(socket.create_connection((url_p.netloc + ':443').split(':', 2)[:2], timeout=timeout, source_address=(ip, 0)), server_side=False, server_hostname=url_p.netloc.split(':')[0])
+            n, s, p = url_p.netloc.rpartition(':')
+            if s != ':' or ']' in p:
+              n = url_p.netloc
+            pconnection[0] = cls.SSLContext.wrap_socket(socket.create_connection((url_p.hostname, url_p.port if url_p.port is not None else 443), timeout=timeout, source_address=(ip, 0)), server_side=False, server_hostname=n)
           else:
             raise
         else:
@@ -2717,6 +2714,7 @@ class DLNARenderer:
   'http-get:*:video/mp2t:*,' \
   'http-get:*:audio/x-ogg:*,' \
   'http-get:*:audio/ac3:*,' \
+  'http-get:*:image/avif:*,' \
   'rtsp-rtp-udp:*:audio/L16:*,' \
   'rtsp-rtp-udp:*:audio/L8:*,' \
   'rtsp-rtp-udp:*:audio/mpeg:*,' \
@@ -3149,16 +3147,16 @@ class DLNARenderer:
         node = None
         for ch_node in didl_root.documentElement.childNodes:
           if ch_node.nodeType == ch_node.ELEMENT_NODE:
-            if ch_node.tagName.lower() == 'item':
+            if ch_node.localName.lower() == 'item':
               node = ch_node
               break
         for ch_node in node.childNodes:
           if ch_node.nodeType == ch_node.ELEMENT_NODE:
-            if ':title' in ch_node.tagName.lower():
+            if ch_node.localName.lower() == 'title':
               title = _XMLGetNodeText(ch_node)[:501]
-            elif ch_node.tagName.lower() == 'res':
-              for att in ch_node.attributes.items():
-                if att[0].lower() == 'protocolInfo'.lower():
+            elif ch_node.localName.lower() == 'res':
+              for att in ch_node.attributes.itemsNS():
+                if att[0][1].lower() == 'protocolinfo':
                   if not uri:
                     if not 'DLNA.ORG_CI=' in att[1].upper():
                       uri = _XMLGetNodeText(ch_node)
@@ -3169,13 +3167,15 @@ class DLNARenderer:
                         protocol_info = att[1]
                   if not s_protocol_info and in_args['CurrentURI'.lower()] == _XMLGetNodeText(ch_node):
                     s_protocol_info = att[1]
-                elif not caption_info and 'subtitlefileuri' in att[0].lower():
+                elif not caption_info and att[0][1].lower() == 'subtitlefileuri':
                   caption_info = att[1]
-            elif ':class' in ch_node.tagName.lower():
+                elif not caption_type and att[0][1].lower() == 'subtitlefiletype':
+                  caption_type = att[1]
+            elif ch_node.localName.lower() == 'class':
               upnp_class = _XMLGetNodeText(ch_node)
-            elif ':captioninfo' in ch_node.tagName.lower():
+            elif ch_node.localName.lower().startswith('captioninfo'):
               caption_info = _XMLGetNodeText(ch_node)
-              caption_type = next(att_v for (att_n, att_v) in ch_node.attributes.items() if att_n.lower()=='sec:type')
+              caption_type = next((att_v for (att_n, att_v) in ch_node.attributes.itemsNS() if att_n[1].lower() == 'type'), '')
       except:
         uri = None
       if not uri:
@@ -3218,7 +3218,7 @@ class DLNARenderer:
           rep.close()
       if self.SearchSubtitles and 'object.item.videoItem'.lower() in upnp_class.lower() and not self.AVTransportSubURI and r'://' in uri and not 'Microsoft-HTTPAPI'.lower() in server.lower() and not "BubbleUPnP".lower() in server.lower():
         uri_name = uri.rsplit('.', 1)[0]
-        for sub_ext in ('.ttxt', '.txt', '.smi', '.srt', '.sub', '.ssa', '.ass'):
+        for sub_ext in ('.ttxt', '.txt', '.smi', '.srt', '.sub', '.ssa', '.ass', '.vtt'):
           rep = _open_url(uri_name + sub_ext, method='HEAD', timeout=2)
           if rep:
             self.AVTransportSubURI = uri_name + sub_ext
@@ -3419,7 +3419,7 @@ class DLNARenderer:
 
 if __name__ == '__main__':
 
-  print('DLNAmpcRenderer v1.3.0 (https://github.com/PCigales/DLNAmpcRenderer)    Copyright © 2022 PCigales')
+  print('DLNAmpcRenderer v1.3.1 (https://github.com/PCigales/DLNAmpcRenderer)    Copyright © 2022 PCigales')
   print(LSTRINGS['license'])
   print('')
 
