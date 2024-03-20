@@ -161,7 +161,7 @@ def _jpeg_exif_orientation(image):
     t = b''
     l = 2
     while t != b'\xff\xe1':
-      f.seek(l - 2, os.SEEK_CUR)
+      f.read(l - 2)
       t = f.read(2)
       if t[:1] != b'\xff' or t == b'\xff\xda':
         raise
@@ -173,7 +173,7 @@ def _jpeg_exif_orientation(image):
       raise
     if f.read(2) != (b'\x00\x2a' if ba == '>' else b'\x2a\x00') :
       raise
-    f.seek(struct.unpack(ba + 'I', f.read(4))[0] - 8, os.SEEK_CUR)
+    f.read(struct.unpack(ba + 'I', f.read(4))[0] - 8)
     ne = struct.unpack(ba + 'H', f.read(2))[0]
     for i in range(ne):
       e = f.read(12)
@@ -3282,6 +3282,8 @@ class DLNARenderer:
     elif acti.lower() == 'Play'.lower():
       if self.TransportState == "NO_MEDIA_PRESENT":
         return '701', None
+      if self.IPCmpcControlerInstance.Player_status.upper() in ("STOPPED", "NO_MEDIA_PRESENT") and self.IPCmpcControlerInstance.Player_image:
+        time.sleep(0.1)
       if self.IPCmpcControlerInstance.Player_status.upper() in ("STOPPED", "NO_MEDIA_PRESENT"):
         self.send_command((0xA0000000, (self.proxy_uri or self.AVTransportURI) if not self.rot_image else 'http://%s:%s/rotated-%s' % (self.mpc_ip, self.Port, self.AVTransportURI.rsplit('/' if r'://' in self.AVTransportURI else '\\', 1)[-1])))
         if '<upnp:class>object.item.imageItem'.lower() in self.AVTransportURIMetaData.replace(' ','').lower():
@@ -3317,6 +3319,7 @@ class DLNARenderer:
         self.send_command((0xA0000002, ''))
         if self.Minimize:
           self.IPCmpcControlerInstance.send_minimize()
+        self.IPCmpcControlerInstance.Player_image = False
     elif acti.lower() == 'Seek'.lower():
       if self.TransportState == "NO_MEDIA_PRESENT":
         return '701', None
