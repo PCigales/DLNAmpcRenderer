@@ -834,7 +834,7 @@ class IPCmpcControler(threading.Thread):
     if not self.wnd_mpc:
       return
     buf = ctypes.create_unicode_buffer(cmd_msg)
-    copydata = COPYDATA_STRUCT(ULONG_PTR(cmd_code), DWORD(ctypes.sizeof(buf)), ctypes.cast(buf, PVOID))
+    copydata = COPYDATA_STRUCT(cmd_code, ctypes.sizeof(buf), ctypes.cast(buf, PVOID))
     user32.SendMessageW(self.wnd_mpc, 0x4a, self.wnd_ctrl, ctypes.addressof(copydata))
     self.logger.log('Lecteur - commande envoyée - code:%s - message:%s' % (hex(cmd_code), cmd_msg), 2)
 
