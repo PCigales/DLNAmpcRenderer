@@ -1,4 +1,4 @@
-# DLNAmpcRenderer v1.3.1 (https://github.com/PCigales/DLNAmpcRenderer)
+# DLNAmpcRenderer v1.3.2 (https://github.com/PCigales/DLNAmpcRenderer)
 # Copyright © 2022 PCigales
 # This program is licensed under the GNU GPLv3 copyleft license (see https://www.gnu.org/licenses)
 
@@ -31,7 +31,7 @@ UDN = 'uuid:' + str(uuid.uuid5(uuid.NAMESPACE_URL, 'DLNAmpcRenderer'))
 
 FR_STRINGS = {
   'license': 'Ce programme est sous licence copyleft GNU GPLv3 (voir https://www.gnu.org/licenses)',
-  'help': 'affichage du message d\'aide et interruption du script', 
+  'help': 'affichage du message d\'aide et interruption du script',
   'parser_ip': 'adresse IP du renderer [auto-sélectionnée par défaut - "0.0.0.0", soit toutes les interfaces, si option présente sans mention d\'adresse]',
   'parser_port': 'port TCP du renderer [8000 par défaut]',
   'parser_name': 'nom du renderer [DLNAmpcRenderer par défaut]',
@@ -249,7 +249,7 @@ class HTTPMessage():
         header_name = header_name.strip().title()
         if header_name:
           header_value = header_value.strip()
-          if not header_name in ('Content-Length', 'Location', 'Host') and http_message.headers.get(header_name):
+          if header_name not in ('Content-Length', 'Location', 'Host') and http_message.headers.get(header_name):
             if header_value:
               http_message.headers[header_name] += ', ' + header_value
           else:
@@ -475,11 +475,11 @@ class HTTPRequest():
         hccl = True
       else:
         hccl = 'close' in (e.strip() for k, v in hitems if k.lower() == 'connection' for e in v.lower().split(','))
-      headers = {k: v for k, v in hitems if not k.lower() in ('host', 'content-length', 'connection', 'expect')}
-      if not 'accept-encoding' in (k.lower() for k, v in hitems):
+      headers = {k: v for k, v in hitems if k.lower() not in ('host', 'content-length', 'connection', 'expect')}
+      if 'accept-encoding' not in (k.lower() for k, v in hitems):
         headers['Accept-Encoding'] = 'identity'
       if data is not None:
-        if not 'chunked' in (e.strip() for k, v in hitems if k.lower() == 'transfer-encoding' for e in v.lower().split(',')):
+        if 'chunked' not in (e.strip() for k, v in hitems if k.lower() == 'transfer-encoding' for e in v.lower().split(',')):
           headers['Content-Length'] = str(len(data))
       headers['Connection'] = 'close' if hccl else 'keep-alive'
     except:
@@ -557,14 +557,16 @@ class HTTPRequest():
 
 ULONG = ctypes.wintypes.ULONG
 DWORD = ctypes.wintypes.DWORD
+LPDWORD = ctypes.wintypes.LPDWORD
 USHORT = ctypes.wintypes.USHORT
 UINT = ctypes.wintypes.UINT
-INT = ctypes.c_int
-LRESULT = ctypes.c_long
+INT = ctypes.wintypes.INT
+LRESULT = ctypes.wintypes.LPARAM
 WPARAM = ctypes.wintypes.WPARAM
 LPARAM = ctypes.wintypes.LPARAM
-ULONG_PTR = ctypes.c_uint64
-PVOID = ctypes.c_void_p
+ULONG_PTR = ctypes.wintypes.WPARAM
+LONG_PTR = ctypes.wintypes.LPARAM
+PVOID = ctypes.wintypes.LPVOID
 LPVOID = ctypes.wintypes.LPVOID
 POINTER = ctypes.POINTER
 pointer = ctypes.pointer
@@ -572,16 +574,59 @@ HANDLE = ctypes.wintypes.HANDLE
 LPCWSTR = ctypes.wintypes.LPCWSTR
 HWND = ctypes.wintypes.HWND
 MSG = ctypes.wintypes.MSG
+LPMSG = ctypes.wintypes.LPMSG
+BOOL = ctypes.wintypes.BOOL
+ATOM = ctypes.wintypes.ATOM
 WINFUNCTYPE = ctypes.WINFUNCTYPE
 kernel32 = ctypes.WinDLL('kernel32',  use_last_error=True)
+kernel32.GetModuleHandleW.restype = HANDLE
+kernel32.GetModuleHandleW.argtypes = (LPCWSTR,)
+kernel32.CreateNamedPipeW.restype = HANDLE
+kernel32.CreateNamedPipeW.argtypes = (LPCWSTR, DWORD, DWORD, DWORD, DWORD, DWORD, DWORD, LPVOID)
+kernel32.DisconnectNamedPipe.restype = BOOL
+kernel32.DisconnectNamedPipe.argtypes = (HANDLE,)
+kernel32.CloseHandle.restype = BOOL
+kernel32.CloseHandle.argtypes = (HANDLE,)
+kernel32.WriteFile.restype = BOOL
+kernel32.WriteFile.argtypes = (HANDLE, LPVOID, DWORD, LPDWORD, LPVOID)
+kernel32.FlushFileBuffers.restype = BOOL
+kernel32.FlushFileBuffers.argtypes = (HANDLE,)
+kernel32.ReadFile.restype = BOOL
+kernel32.ReadFile.argtypes = (HANDLE, LPVOID, DWORD, LPDWORD, LPVOID)
 user32 = ctypes.WinDLL('user32',  use_last_error=True)
+user32.FindWindowExW.restype = HWND
+user32.FindWindowExW.argtypes = (HWND, HWND, LPCWSTR, LPCWSTR)
+user32.PostMessageW.restype = BOOL
+user32.PostMessageW.argtypes = (HWND, UINT, WPARAM, LPARAM)
+user32.DefWindowProcW.restype = LRESULT
+user32.DefWindowProcW.argtypes = (HWND, UINT, WPARAM, LPARAM)
+user32.SendMessageW.restype = LRESULT
+user32.SendMessageW.argtypes = (HWND, UINT, WPARAM, LPARAM)
+user32.ShowWindow.restype = BOOL
+user32.ShowWindow.argtypes = (HWND, INT)
+user32.GetWindowLongPtrW.restype = LONG_PTR
+user32.GetWindowLongPtrW.argtypes = (HWND, INT)
+user32.SetForegroundWindow.restype = BOOL
+user32.SetForegroundWindow.argtypes = (HWND,)
+user32.GetWindow.restype = HWND
+user32.GetWindow.argtypes = (HWND, UINT)
+user32.SetWindowTextW.restype = BOOL
+user32.SetWindowTextW.argtypes = (HWND, LPCWSTR)
+user32.RegisterClassExW.restype = ATOM
+user32.RegisterClassExW.argtypes = (LPVOID,)
+user32.CreateWindowExW.restype = HWND
+user32.CreateWindowExW.argtypes = (DWORD, LPCWSTR, LPCWSTR, DWORD, INT, INT, INT, INT, HWND, HANDLE, HANDLE, LPVOID)
+user32.GetMessageW.restype = BOOL
+user32.GetMessageW.argtypes = (LPMSG, HWND, UINT, UINT)
+user32.DispatchMessageW.restype = LRESULT
+user32.DispatchMessageW.argtypes = (LPMSG,)
 
 class COPYDATA_STRUCT(ctypes.Structure):
   _fields_ = [('dwData', ULONG_PTR), ('cbData', DWORD), ('lpData', PVOID)]
 
 LPCOPYDATA = POINTER(COPYDATA_STRUCT)
 
-WNDPROC = WINFUNCTYPE(INT, HWND, UINT, WPARAM, LPARAM)
+WNDPROC = WINFUNCTYPE(LRESULT, HWND, UINT, WPARAM, LPARAM)
 
 class WNDCLASSEXW(ctypes.Structure):
     _fields_ = [("cbSize", UINT),
@@ -601,33 +646,30 @@ class IPCmpcControler(threading.Thread):
 
   SCRIPT_PATH = os.path.dirname(os.path.abspath(__file__))
 
-  def _PyWndProcedure(self, hWnd, Msg, wParam, lParam):
-      self.logger.log('Fenêtre de contrôle - message reçu: %s' % hex(Msg), 2)
-      if Msg == 0x02:
-        user32.PostQuitMessage(0)
-      else:
-        if Msg == 0x4A:
-          copydata = ctypes.cast(lParam, LPCOPYDATA).contents
-          not_code = copydata.dwData
-          not_msg = ctypes.wstring_at(copydata.lpData, copydata.cbData // 2)[:-1]
-          self.Msg_buffer.append((not_code, not_msg))
-          self.logger.log('Lecteur - notification reçue - code:%s - message:%s' % (hex(not_code), not_msg), 2)
-          if not_code == 0x50000000:
-            self.wnd_mpc = int(not_msg)
-            self.logger.log('Lecteur - handle de mpc: %s' % self.wnd_mpc, 1)
-            self.Player_event_event.set()
-            self.wnd_mpc_mute = user32.FindWindowExW(HWND(self.wnd_mpc), HWND(0), LPCWSTR('ToolbarWindow32'), LPCWSTR(0))
-            self.wnd_mpc_volume = user32.FindWindowExW(HWND(self.wnd_mpc_mute), HWND(0), LPCWSTR('msctls_trackbar32'), LPCWSTR(0))
-            self.set_title(self.title_name)
+  def _PyWndProcedure(self, hWnd, uMsg, wParam, lParam):
+      self.logger.log('Fenêtre de contrôle - message reçu: %s' % hex(uMsg), 2)
+      if uMsg == 0x4A:
+        copydata = ctypes.cast(lParam, LPCOPYDATA).contents
+        not_code = copydata.dwData
+        not_msg = ctypes.wstring_at(copydata.lpData, max(copydata.cbData // 2 - 1, 0))
+        self.logger.log('Lecteur - notification reçue - code:%s - message:%s' % (hex(not_code), not_msg), 2)
+        if not_code == 0x50000000:
+          self.wnd_mpc = int(not_msg)
+          self.logger.log('Lecteur - handle de mpc: %s' % self.wnd_mpc, 1)
+          self.Player_event_event.set()
+          self.wnd_mpc_mute = user32.FindWindowExW(self.wnd_mpc, None, 'ToolbarWindow32', None)
+          self.wnd_mpc_volume = user32.FindWindowExW(self.wnd_mpc_mute, None, 'msctls_trackbar32', None)
+          self.set_title(self.title_name)
+        else:
+          if not_code == 0x5000000B:
+            self.Msg_buffer[0] = "quit"
+            user32.PostMessageW(self.wnd_ctrl, 0x0012, 0, 0)
           else:
-            if not_code == 0x5000000B:
-              self.Msg_buffer[0] = "quit"
-              user32.PostQuitMessage(0)
-            self.Msg_event.set()
-        return user32.DefWindowProcW(HWND(hWnd), MSG(Msg), WPARAM(wParam), LPARAM(lParam))
-      return 0
+            self.Msg_buffer.append((not_code, not_msg))
+          self.Msg_event.set()
+      return user32.DefWindowProcW(hWnd, uMsg, wParam, lParam)
 
-  def __init__(self, title_name = 'mpc', verbosity=0):
+  def __init__(self, title_name='mpc', verbosity=0):
     self.verbosity = verbosity
     self.logger = log_event(verbosity)
     self.title_name = title_name
@@ -792,36 +834,33 @@ class IPCmpcControler(threading.Thread):
     if not self.wnd_mpc:
       return
     buf = ctypes.create_unicode_buffer(cmd_msg)
-    copydata = COPYDATA_STRUCT()
-    copydata.dwData = ULONG_PTR(cmd_code)
-    copydata.cbData = DWORD(ctypes.sizeof(buf))
-    copydata.lpData = ctypes.cast(buf, PVOID)
-    user32.SendMessageW(HWND(self.wnd_mpc), UINT(0x4a), HWND(self.wnd_ctrl), copydata)
+    copydata = COPYDATA_STRUCT(ULONG_PTR(cmd_code), DWORD(ctypes.sizeof(buf)), ctypes.cast(buf, PVOID))
+    user32.SendMessageW(self.wnd_mpc, 0x4a, self.wnd_ctrl, ctypes.addressof(copydata))
     self.logger.log('Lecteur - commande envoyée - code:%s - message:%s' % (hex(cmd_code), cmd_msg), 2)
 
   def send_key(self, key_code):
     if not self.wnd_mpc:
       return
-    user32.SendMessageW(HWND(self.wnd_mpc), UINT(0x111), WPARAM(key_code), LPARAM(0))
+    user32.SendMessageW(self.wnd_mpc, 0x111, key_code, 0)
     self.logger.log('Lecteur - touche envoyée - code:%s' % key_code, 2)
 
   def send_minimize(self):
     if not self.wnd_mpc:
       return
-    user32.SendMessageW(HWND(self.wnd_mpc), UINT(0x0112), WPARAM(0xF020), LPARAM(0))
+    user32.SendMessageW(self.wnd_mpc, 0x0112, 0xF020, 0)
     self.logger.log('Lecteur - commande envoyée: minimize', 2)
-  
+
   def send_restore(self):
     if not self.wnd_mpc:
       return
-    user32.SendMessageW(HWND(self.wnd_mpc), UINT(0x0112), WPARAM(0xF120), LPARAM(0))
+    user32.SendMessageW(self.wnd_mpc, 0x0112, 0xF120, 0)
     self.logger.log('Lecteur - commande envoyée: restore', 2)
 
   def send_fullscreen(self):
     if not self.wnd_mpc:
       return
-    user32.ShowWindow(HWND(self.wnd_mpc), INT(8))
-    if user32.GetWindowLongPtrW(HWND(self.wnd_mpc), INT(-16)) & 0x00c00000:
+    user32.ShowWindow(self.wnd_mpc, 8)
+    if user32.GetWindowLongPtrW(self.wnd_mpc, -16) & 0x00c00000:
       self.send_command(0xA0004000, '')
     user32.SetForegroundWindow(self.wnd_mpc)
 
@@ -838,19 +877,20 @@ class IPCmpcControler(threading.Thread):
       time.sleep(0.5)
     if not wnd_open:
       return None
-    wnd_edit = user32.FindWindowExW(HWND(user32.FindWindowExW(HWND(user32.FindWindowExW(HWND(wnd_open), HWND(0), LPCWSTR('ComboBoxEx32'), LPCWSTR(0))), HWND(0), LPCWSTR('ComboBox'), LPCWSTR(0))), HWND(0), LPCWSTR('Edit'), LPCWSTR(0))
-    user32.SendMessageW(HWND(wnd_edit), UINT(0x0c), WPARAM(0), LPCWSTR(uri))
-    wnd_ok = 0
+    wnd_edit = user32.FindWindowExW(user32.FindWindowExW(user32.FindWindowExW(wnd_open, None, 'ComboBoxEx32', None), None, 'ComboBox', None), None, 'Edit', None)
+    uri = LPCWSTR(uri)
+    user32.SendMessageW(wnd_edit, 0x0c, 0, ctypes.cast(uri, LPVOID).value)
+    wnd_ok = None
     for i in range(3):
-      wnd_ok = user32.FindWindowExW(HWND(wnd_open), HWND(wnd_ok), LPCWSTR('Button'), LPCWSTR(0))
-      if user32.GetWindowLongPtrW(HWND(wnd_ok), -12) == 1:
+      wnd_ok = user32.FindWindowExW(wnd_open, wnd_ok, 'Button', None)
+      if user32.GetWindowLongPtrW(wnd_ok, -12) == 1:
         break
-    user32.SendMessageW(HWND(wnd_ok), UINT(0xf5), WPARAM(0), LPARAM(0))
+    user32.SendMessageW(wnd_ok, 0xf5, 0, 0)
 
   def get_mute(self):
     if not self.wnd_mpc:
       return
-    return True if user32.SendMessageW(HWND(self.wnd_mpc_mute), UINT(0x40a), WPARAM(909), LPARAM(0)) else False
+    return True if user32.SendMessageW(self.wnd_mpc_mute, 0x40a, 909, 0) else False
 
   def set_mute(self, mute):
     if not self.wnd_mpc:
@@ -864,12 +904,12 @@ class IPCmpcControler(threading.Thread):
   def get_volume(self):
     if not self.wnd_mpc:
       return
-    return user32.SendMessageW(HWND(self.wnd_mpc_volume), UINT(0x400), WPARAM(909), LPARAM(0))
+    return user32.SendMessageW(self.wnd_mpc_volume, 0x400, 909, 0)
 
   def set_volume(self, volume):
     if not self.wnd_mpc:
       return
-    user32.SendMessageW(HWND(self.wnd_mpc_volume), UINT(0x422), WPARAM(0), volume)
+    user32.SendMessageW(self.wnd_mpc_volume, 0x422, 0, volume)
 
   def send_rotate(self, rotation):
     if not self.wnd_mpc:
@@ -884,7 +924,7 @@ class IPCmpcControler(threading.Thread):
   def set_title(self, title):
     if not self.wnd_mpc:
       return
-    user32.SetWindowTextW(HWND(self.wnd_mpc), LPCWSTR(title))
+    user32.SetWindowTextW(self.wnd_mpc, title)
 
   def send_commands(self):
     iter = 0
@@ -930,24 +970,12 @@ class IPCmpcControler(threading.Thread):
     self.send_command(0xA0004006, '')
 
   def run(self):
-    hInst = kernel32.GetModuleHandleW(LPCWSTR(0))
+    hInst = kernel32.GetModuleHandleW(None)
     wclassName = 'mpcControler'
     wname = 'mpcControl'
-    wndClass = WNDCLASSEXW()
-    wndClass.cbSize = ctypes.sizeof(WNDCLASSEXW)
-    wndClass.style = 3
-    wndClass.lpfnWndProc = self.WndProc
-    wndClass.cbClsExtra = 0
-    wndClass.cbWndExtra = 0
-    wndClass.hInstance = hInst
-    wndClass.hIcon = 0
-    wndClass.hCursor = 0
-    wndClass.hBrush = 0
-    wndClass.lpszMenuName = 0
-    wndClass.lpszClassName = LPCWSTR(wclassName)
-    wndClass.hIconSm = 0
+    wndClass = WNDCLASSEXW(ctypes.sizeof(WNDCLASSEXW), 3, self.WndProc, 0, 0, hInst, 0, 0, 0, 0, LPCWSTR(wclassName), 0)
     regRes = user32.RegisterClassExW(ctypes.byref(wndClass))
-    self.wnd_ctrl = user32.CreateWindowExW(DWORD(0), LPCWSTR(wclassName), LPCWSTR(wname), DWORD(0x40000000),INT(0), INT(0), INT(0), INT(0), HWND(-3), HANDLE(0), HANDLE(0), hInst, LPVOID(0))
+    self.wnd_ctrl = user32.CreateWindowExW(0, wclassName, wname, 0x40000000, 0, 0, 0, 0, -3, 0, hInst, None)
     if not self.wnd_ctrl:
       self.logger.log(LSTRINGS['wndctrl_fail'], 0)
       self.Msg_buffer[0] = "quit"
@@ -963,13 +991,13 @@ class IPCmpcControler(threading.Thread):
     msg = MSG()
     lpMsg = pointer(msg)
     while self.Msg_buffer[0] == "run" and self.Cmd_buffer[0] == "run":
-      user32.GetMessageW(lpMsg, HWND(self.wnd_ctrl), 0, 0)
+      user32.GetMessageW(lpMsg, self.wnd_ctrl, 0, 0)
       user32.DispatchMessageW(lpMsg)
 
   def stop(self):
     self.Cmd_buffer[0] = "quit"
     self.Cmd_Event.set()
-    user32.PostMessageW(HWND(self.wnd_ctrl), UINT(0x0012), WPARAM(0), LPARAM(0))
+    user32.PostMessageW(self.wnd_ctrl, 0x0012, 0, 0)
 
 
 class DLNAArgument:
@@ -1019,21 +1047,21 @@ class DLNASearchServer():
     req = HTTPMessage((msg, sock))
     if req.method != 'M-SEARCH':
       return
-    if not req.header('ST', '').lower() in (s.lower() for s in ('ssdp:all', 'upnp:rootdevice', 'urn:schemas-upnp-org:device:MediaRenderer:1', 'urn:schemas-upnp-org:service:AVTransport:1', UDN)):
+    if req.header('ST', '').lower() not in (s.lower() for s in ('ssdp:all', 'upnp:rootdevice', 'urn:schemas-upnp-org:device:MediaRenderer:1', 'urn:schemas-upnp-org:service:AVTransport:1', UDN)):
       return
     self.logger.log('Réception, sur l\'interface %s, d\'un message de recherche de renderer de %s:%s' % (ip, *addr), 2)
     if self.__shutdown_request or self.__is_shut_down.is_set():
       return
     resp = 'HTTP/1.1 200 OK\r\n' \
     'Cache-Control: max-age=1800\r\n' \
-    'Date: ' + email.utils.formatdate(time.time(), usegmt=True) + '\r\n' \
+    'Date: %s\r\n' \
     'Ext: \r\n' \
-    'Location: ' + self.Renderer.DescURL % ip + '\r\n' \
-    'Server: DLNAmpcRenderer\r\n' \
-    'ST: ' + req.header('ST') + '\r\n' \
-    'USN: ' + UDN + '::' + req.header('ST') + '\r\n' \
+    'Location: %s\r\n' \
+    'Server: DLNAmpvRenderer\r\n' \
+    'ST: %s\r\n' \
+    'USN: %s::%s\r\n' \
     'Content-Length: 0\r\n' \
-    '\r\n'
+    '\r\n' % (email.utils.formatdate(time.time(), usegmt=True), (self.Renderer.DescURL % ip), req.header('ST'), UDN, req.header('ST'))
     try:
       sock.sendto(resp.encode('ISO-8859-1'), addr)
       self.logger.log('Envoi, sur l\'interface %s, de la réponse au message de recherche de renderer de %s:%s' % (ip, *addr), 2)
@@ -1095,13 +1123,6 @@ class DLNARequestServer(socketserver.ThreadingTCPServer):
     self.logger = log_event(verbosity)
     super().__init__(*args, **kwargs)
     self.__dict__['_BaseServer__is_shut_down'].set()
-
-  def server_bind(self):
-    try:
-      self.socket.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 0)
-    except:
-      pass
-    super().server_bind()
 
   def process_request_thread(self, request, client_address):
     try:
@@ -2731,9 +2752,15 @@ class DLNARenderer:
       _fields_ = [('dwNumEntries', DWORD), ('table', MIB_IPADDRROW*0)]
     P_MIB_IPADDRTABLE = POINTER(MIB_IPADDRTABLE)
     s = ULONG(0)
-    b = ctypes.create_string_buffer(s.value)
-    while iphlpapi.GetIpAddrTable(b, ctypes.byref(s), False) == 122:
+    while True:
       b = ctypes.create_string_buffer(s.value)
+      r = iphlpapi.GetIpAddrTable(b, ctypes.byref(s), BOOL(False))
+      if r == 0:
+        break
+      elif r != 122:
+        return ()
+    if s.value == 0:
+      return ()
     r = ctypes.cast(b, P_MIB_IPADDRTABLE).contents
     n = r.dwNumEntries
     t = ctypes.cast(ctypes.byref(r.table), POINTER(MIB_IPADDRROW * n)).contents
@@ -2943,7 +2970,7 @@ class DLNARenderer:
       self.logger.log('Démarrage de l\'écoute des requêtes à l\'adresse %s:%s' % (self.Ip, self.Port), 1)
       manager_thread = threading.Thread(target=self._start_request_manager)
       manager_thread.start()
-  
+
   def stop_request_management(self):
     if self.is_request_manager_running:
       self.logger.log('Fin de l\'écoute des requêtes', 1)
@@ -2962,7 +2989,7 @@ class DLNARenderer:
   def _send_delayed_minimize(self):
     if self.IPCmpcControlerInstance.Player_status in ('STOPPED', 'PAUSED_PLAYBACK'):
       self.IPCmpcControlerInstance.send_minimize()
-  
+
   def send_delayed_minimize(self):
     min_thread = threading.Timer(0.5, self._send_delayed_minimize)
     min_thread.start()
@@ -2974,12 +3001,13 @@ class DLNARenderer:
         self.mpc_shutdown_event.set()
       while len(self.IPCmpcControlerInstance.Player_events) > 0:
         event = self.IPCmpcControlerInstance.Player_events.pop(0)
-        if event[0] == 'RelativeTimePosition':
+        ev = event[0]
+        if ev == 'RelativeTimePosition':
           self.RelativeTimePosition = event[1] if event[1] else "0:00:00"
-        elif event[0] == 'CurrentMediaDuration':
+        elif ev == 'CurrentMediaDuration':
           self.CurrentMediaDuration = event[1] if event[1] else "0:00:00"
           self.events_add('AVTransport', (('CurrentMediaDuration', self.CurrentMediaDuration),('CurrentTrackDuration', self.CurrentMediaDuration)))
-        elif event[0] == 'TransportState':
+        elif ev == 'TransportState':
           self.TransportState = event[1].upper()
           if self.TransportState == "STOPPED":
             if self.Minimize:
@@ -2993,13 +3021,13 @@ class DLNARenderer:
             if self.FullScreen:
               self.IPCmpcControlerInstance.send_fullscreen()
           self.events_add('AVTransport', (('TransportState', self.TransportState), ('CurrentTransportActions', {'TRANSITIONING': "Stop", 'STOPPED': "Play,Seek",'PAUSED_PLAYBACK': "Play,Stop,Seek" ,'PLAYING': "Pause,Stop,Seek"}.get(self.TransportState, ""))))
-        elif event[0] == 'TransportStatus' and event[1].upper() == "ERROR_OCCURRED":
+        elif ev == 'TransportStatus' and event[1].upper() == "ERROR_OCCURRED":
           self.events_add('AVTransport', (('TransportStatus', "ERROR_OCCURRED"),))
           self.events_add('AVTransport', (('TransportStatus', "OK"),))
-        elif event[0] == 'Mute':
+        elif ev == 'Mute':
           self.Mute = "1" if event[1] else "0"
           self.events_add('RenderingControl', (('Mute channel="Master"', self.Mute),))
-        elif event[0] == 'Volume':
+        elif ev == 'Volume':
           self.Volume = str(event[1])
           self.events_add('RenderingControl', (('Volume channel="Master"', self.Volume),))
       if self.is_events_manager_running:
@@ -3028,8 +3056,8 @@ class DLNARenderer:
   def _rotate_jpeg(self, image, angle):
     try:
       name = NAME + ':%s' % self.Port
-      pipe_w = HANDLE(kernel32.CreateNamedPipeW(LPCWSTR(r'\\.\pipe\write_' + urllib.parse.quote(name, safe='')), DWORD(0x00000002), DWORD(0), DWORD(1), DWORD(0x100000), DWORD(0x100000), DWORD(0), HANDLE(0)))
-      pipe_r = HANDLE(kernel32.CreateNamedPipeW(LPCWSTR(r'\\.\pipe\read_' + urllib.parse.quote(name, safe='')), DWORD(0x00000001), DWORD(0), DWORD(1), DWORD(0x100000), DWORD(0x100000), DWORD(0), HANDLE(0)))
+      pipe_w = kernel32.CreateNamedPipeW(r'\\.\pipe\write_' + urllib.parse.quote(name, safe=''), 0x00000002, 0, 1, 0x100000, 0x100000, 0, None)
+      pipe_r = kernel32.CreateNamedPipeW(r'\\.\pipe\read_' + urllib.parse.quote(name, safe=''), 0x00000001, 0, 1, 0x100000, 0x100000, 0, None)
     except:
       return None
     b = ctypes.create_string_buffer(0x100000)
@@ -3046,7 +3074,7 @@ class DLNARenderer:
       return None
     n = DWORD()
     try:
-      while not kernel32.WriteFile(pipe_w, ctypes.cast(image, PVOID), DWORD(len(image)), ctypes.byref(n), LPVOID(0)):
+      while not kernel32.WriteFile(pipe_w, ctypes.cast(image, LPVOID), len(image), ctypes.byref(n), None):
         if process.poll() != None:
           kernel32.DisconnectNamedPipe(pipe_w)
           kernel32.CloseHandle(pipe_w)
@@ -3062,7 +3090,7 @@ class DLNARenderer:
         kernel32.DisconnectNamedPipe(pipe_w)
         kernel32.CloseHandle(pipe_w)
         kernel32.DisconnectNamedPipe(pipe_r)
-        kernel32.CloseHandle(pipe_r) 
+        kernel32.CloseHandle(pipe_r)
       except:
         pass
       try:
@@ -3076,7 +3104,7 @@ class DLNARenderer:
     again = True
     try:
       while again:
-        again = kernel32.ReadFile(pipe_r, ctypes.cast(b, PVOID), DWORD(len(b)), ctypes.byref(n), LPVOID(0))
+        again = kernel32.ReadFile(pipe_r, ctypes.cast(b, LPVOID), len(b), ctypes.byref(n), None)
         again = (again or not rotated) and process.poll() == None
         rotated = rotated + b.raw[:n.value]
       kernel32.DisconnectNamedPipe(pipe_r)
@@ -3112,7 +3140,7 @@ class DLNARenderer:
       return '401', None
     in_args = dict((arg.Name.lower(), arg.DefaultValue) for arg in action.Arguments if arg.Direction.lower() == 'in')
     for prop_name, prop_value in args:
-      if not prop_name.lower() in in_args:
+      if prop_name.lower() not in in_args:
         return '402', None
       in_args[prop_name.lower()] = prop_value
     for prop_name in in_args:
@@ -3127,7 +3155,7 @@ class DLNARenderer:
     self.logger.log('Début du traitement de l\'action %d %s-%s' % (action_id, servi, acti), 2)
     if acti.lower() == 'GetProtocolInfo'.lower():
       out_args['Source'] = ""
-      if not "Microsoft".lower() in agent.lower() or not self.WMPDMCHideMKV:
+      if "Microsoft".lower() not in agent.lower() or not self.WMPDMCHideMKV:
         out_args['Sink'] = DLNARenderer.Sink
       else:
         out_args['Sink'] = DLNARenderer.Sink.replace(',http-get:*:video/x-matroska:*','')
@@ -3158,7 +3186,7 @@ class DLNARenderer:
               for att in ch_node.attributes.itemsNS():
                 if att[0][1].lower() == 'protocolinfo':
                   if not uri:
-                    if not 'DLNA.ORG_CI=' in att[1].upper():
+                    if 'DLNA.ORG_CI=' not in att[1].upper():
                       uri = _XMLGetNodeText(ch_node)
                       protocol_info = att[1]
                     else:
@@ -3216,7 +3244,7 @@ class DLNARenderer:
           self.AVTransportSubURI = ""
         elif rep != True:
           rep.close()
-      if self.SearchSubtitles and 'object.item.videoItem'.lower() in upnp_class.lower() and not self.AVTransportSubURI and r'://' in uri and not 'Microsoft-HTTPAPI'.lower() in server.lower() and not "BubbleUPnP".lower() in server.lower():
+      if self.SearchSubtitles and 'object.item.videoItem'.lower() in upnp_class.lower() and not self.AVTransportSubURI and r'://' in uri and 'Microsoft-HTTPAPI'.lower() not in server.lower() and "BubbleUPnP".lower() not in server.lower():
         uri_name = uri.rsplit('.', 1)[0]
         for sub_ext in ('.ttxt', '.txt', '.smi', '.srt', '.sub', '.ssa', '.ass', '.vtt'):
           rep = _open_url(uri_name + sub_ext, method='HEAD', timeout=2)
@@ -3250,12 +3278,12 @@ class DLNARenderer:
         self.IPCmpcControlerInstance.Player_rotation = {'upper-left': 0, 'lower-right': 180, 'upper-right': 90, 'lower-left': 270}.get(_jpeg_exif_orientation(self.AVTransportURI), 0)
       self.AVTransportURIMetaData = '<DIDL-Lite xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" xmlns:dlna="urn:schemas-dlna-org:metadata-1-0/" xmlns:sec="http://www.sec.co.kr/"><item><dc:title>%s</dc:title><upnp:class>%s</upnp:class><res protocolInfo="%s">%s</res>%s</item></DIDL-Lite>' % (html.escape(title), upnp_class, html.escape(protocol_info), html.escape(uri), '<sec:CaptionInfoEx sec:type="%s">%s</sec:CaptionInfoEx>' %(html.escape(caption_type), html.escape(self.AVTransportSubURI)) if self.AVTransportSubURI else '')
       if 'MDEServer'.lower() in self.AVTransportURI.lower():
-        if 'DLNA.ORG_CI' in self.AVTransportURIMetaData and not 'DLNA.ORG_CI=0' in self.AVTransportURIMetaData:
+        if 'DLNA.ORG_CI' in self.AVTransportURIMetaData and 'DLNA.ORG_CI=0' not in self.AVTransportURIMetaData:
           reject_range = True
       if not self.NoPartReqIntermediate or not reject_range:
         self.proxy_uri = ''
       else:
-        self.proxy_uri = 'http://%s:%s/proxy-%s' % (self.mpc_ip, self.Port, self.AVTransportURI.rsplit('/' if r'://' in self.AVTransportURI else '\\', 1)[-1])    
+        self.proxy_uri = 'http://%s:%s/proxy-%s' % (self.mpc_ip, self.Port, self.AVTransportURI.rsplit('/' if r'://' in self.AVTransportURI else '\\', 1)[-1])
       self.events_add('AVTransport', (('AVTransportURI', self.AVTransportURI), ('AVTransportURIMetaData', self.AVTransportURIMetaData), ('CurrentTrackMetaData', self.AVTransportURIMetaData), ('CurrentTrackURI', self.AVTransportURI)))
       if prev_transp_state == "TRANSITIONING":
         self.send_command((0xA0000002, ''))
@@ -3323,7 +3351,7 @@ class DLNARenderer:
     elif acti.lower() == 'Seek'.lower():
       if self.TransportState == "NO_MEDIA_PRESENT":
         return '701', None
-      if not in_args['unit'].upper() in ("REL_TIME", "ABS_TIME"):
+      if in_args['unit'].upper() not in ("REL_TIME", "ABS_TIME"):
         return '701', None
       prev_transp_state = self.TransportState
       if prev_transp_state != "STOPPED":
@@ -3422,7 +3450,7 @@ class DLNARenderer:
 
 if __name__ == '__main__':
 
-  print('DLNAmpcRenderer v1.3.1 (https://github.com/PCigales/DLNAmpcRenderer)    Copyright © 2022 PCigales')
+  print('DLNAmpcRenderer v1.3.2 (https://github.com/PCigales/DLNAmpcRenderer)    Copyright © 2022 PCigales')
   print(LSTRINGS['license'])
   print('')
 
